@@ -2,14 +2,15 @@
 import os
 import sys
 from PyQt5 import QtWidgets
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QAbstractItemView
 
 import design
 
 
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
-    def select_directory(self):
+    def select_directory(self) -> None:
         self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select Directory'))
 
         if self.directory_path:
@@ -21,15 +22,20 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                         self.workflows.append(workflow)
                 except NotADirectoryError:
                     pass
-            self.filter_workflows()
+            self.filter_workflows('')
 
-    def filter_workflows(self):
+    def filter_workflows(self, search_text: str) -> None:
         self.workflow_list_model.clear()
-        search_text = self.search_box.text()
         for workflow in [wf for wf in self.workflows if search_text in wf]:
             item = QStandardItem(workflow)
             item.setEditable(False)
             self.workflow_list_model.appendRow(item)
+
+    def select_workflows(self) -> None:
+        for select in self.workflow_list.selectionModel().selectedIndexes():
+            workflow = select.data(Qt.DisplayRole)
+            print(workflow)
+
 
     def __init__(self):
         super().__init__()
@@ -39,6 +45,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.workflow_list_model = QStandardItemModel(self.workflow_list)
         self.workflow_list.setModel(self.workflow_list_model)
+        self.workflow_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.source_list_model = QStandardItemModel(self.source_list)
         self.source_list.setModel(self.source_list_model)
         self.effected_list_model = QStandardItemModel(self.effected_list)
@@ -46,6 +53,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.actionOpen.triggered.connect(self.select_directory)
         self.search_box.textChanged.connect(self.filter_workflows)
+        self.workflow_list.selectionModel().selectionChanged.connect(self.select_workflows)
 
 
 def main():
