@@ -27,18 +27,18 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     pass
             self.store.create_db_tables(force=True)
             self.store.insert_workflows(workflow_names)
-            self.filter_workflows('')
+            self.wf_filter_workflows('')
 
-    def filter_workflows(self, search_text: str) -> None:
-        self.workflow_list_model.clear()
+    def wf_filter_workflows(self, search_text: str) -> None:
+        self.wf_workflow_list_model.clear()
         for workflow in self.store.get_workflows(search_text, only_names=True):
             item = QStandardItem(workflow)
             item.setEditable(False)
-            self.workflow_list_model.appendRow(item)
+            self.wf_workflow_list_model.appendRow(item)
 
-    def select_workflows(self) -> None:
+    def wf_select_workflows(self) -> None:
         workflow_names: List[str] = []
-        for select in self.workflow_list.selectionModel().selectedIndexes():
+        for select in self.wf_workflow_list.selectionModel().selectedIndexes():
             workflow_names.append(select.data(Qt.DisplayRole))
         workflows = self.store.get_workflows_by_names(workflow_names)
         print(workflows)
@@ -49,18 +49,18 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.directory_path: str = None
         self.setupUi(self)
 
-        self.workflow_list_model = QStandardItemModel(self.workflow_list)
-        self.workflow_list.setModel(self.workflow_list_model)
-        self.workflow_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.source_list_model = QStandardItemModel(self.source_list)
-        self.source_list.setModel(self.source_list_model)
-        self.effected_list_model = QStandardItemModel(self.effected_list)
-        self.effected_list.setModel(self.effected_list_model)
+        self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
+        self.wf_workflow_list.setModel(self.wf_workflow_list_model)
+        self.wf_workflow_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.wf_source_list_model = QStandardItemModel(self.wf_source_list)
+        self.wf_source_list.setModel(self.wf_source_list_model)
+        self.wf_effected_list_model = QStandardItemModel(self.wf_effected_list)
+        self.wf_effected_list.setModel(self.wf_effected_list_model)
 
         self.actionOpen.triggered.connect(self.select_directory)
-        self.search_box.textChanged.connect(self.filter_workflows)
-        self.workflow_list.selectionModel().selectionChanged.connect(self.select_workflows)
-        self.filter_workflows('')
+        self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
+        self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
+        self.wf_filter_workflows('')
 
 
 def main():
