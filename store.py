@@ -3,12 +3,12 @@ from typing import Set, List, Tuple, Union
 
 
 class Table:
-    def __init__(self, index: int, name: str, meaning: str, authors: str, external: bool):
+    def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: bool):
         self.index: int = index
         self.name: str = name
         self.meaning: str = meaning
         self.authors: str = authors
-        self.external: bool = external
+        self.sqooped: bool = sqooped
 
     def __str__(self):
         return f'{self.index}. {self.name}'
@@ -29,7 +29,13 @@ class Workflow:
         return str(self.name)
 
 
-class TableDependencies:
+class TableTableDep:
+    def __init__(self):
+        self.based_on_sqooped: Set[Set[int, int]] = {}
+        self.backward_dependencies: Set[Set[int, int]] = {}
+
+
+class TableWorkflowDep:
     def __init__(self):
         self.forward_dependencies: Set[Set[int, int]] = {}
         self.backward_dependencies: Set[Set[int, int]] = {}
@@ -52,7 +58,7 @@ class Store:
                 NAME TEXT NOT NULL UNIQUE,
                 MEANING TEXT NOT NULL DEFAULT '',
                 AUTHORS TEXT NOT NULL DEFAULT '',
-                EXTERNAL BOOLEAN NOT NULL DEFAULT FALSE
+                SQOOPED BOOLEAN NOT NULL DEFAULT FALSE
             );
         """)
         cursor.execute("""
@@ -67,7 +73,7 @@ class Store:
     def get_tables(self, search_text: str = '', only_names: bool = False) -> List[Union[str, Table]]:
         cursor: sqlite3.Cursor = self.connection.cursor()
         tables: List[Tuple] = cursor.execute(
-            'SELECT ID, NAME, MEANING, AUTHORS, EXTERNAL FROM TABLES WHERE instr(NAME, ?) > 0;', (search_text,)).fetchall()
+            'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED FROM TABLES WHERE instr(NAME, ?) > 0;', (search_text,)).fetchall()
         cursor.close()
         if only_names:
             return [d[1] for d in tables]
@@ -103,7 +109,7 @@ class Store:
     def insert_tables(self, table_names: List[str]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""
-                            INSERT OR IGNORE INTO TABLES(NAME, MEANING, AUTHORS, EXTERNAL) VALUES(?, ?, ?, ?)
+                            INSERT OR IGNORE INTO TABLES(NAME, MEANING, AUTHORS, SQOOPED) VALUES(?, ?, ?, ?)
                            """, [(n, '', '', False) for n in table_names])
         self.connection.commit()
         cursor.close()
