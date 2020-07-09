@@ -17,7 +17,8 @@ class Table:
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
-        return Table(**data)
+        return Table(data['index'], data['name'], '', '', data['sqooped'], data['created_in_workflows'],
+                     data['updated_in_workflows'], data['based_on_tables'])
 
     def __str__(self):
         return f'{self.index}. {self.name}'
@@ -27,7 +28,11 @@ class Table:
 
 
 class Workflow:
-    def __init__(self, index: int, name: str, source_tables: List[str], effected_tables: List[str]):
+    def __init__(self, index: int, name: str, source_tables=None, effected_tables=None):
+        if source_tables is None:
+            source_tables = []
+        if effected_tables is None:
+            effected_tables = list()
         self.index: int = index
         self.name: str = name
         self.source_tables: List[str] = source_tables
@@ -35,7 +40,7 @@ class Workflow:
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
-        return Table(**data)
+        return Workflow(**data)
 
     def __str__(self):
         return self.name
@@ -85,9 +90,9 @@ class Store:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS TABLE_USED_IN
             (
-                CREATED_TABLE REFERENCES TABLES,
+                USED_TABLE REFERENCES TABLES,
                 WORKFLOW REFERENCES WORKFLOWS,
-                CONSTRAINT TUI_PK PRIMARY KEY(CREATED_TABLE, WORKFLOW)
+                CONSTRAINT TUI_PK PRIMARY KEY(USED_TABLE, WORKFLOW)
             );
         """)
         cursor.execute("""
@@ -156,7 +161,7 @@ class Store:
     def insert_table_created_in(self, created_ins: List[Tuple[int, int]]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""
-                                INSERT OR IGNORE INTO TABLE_CREATED_IN(TABLES, WORKFLOWS) VALUES(?, ?)
+                                INSERT OR IGNORE INTO TABLE_CREATED_IN(CREATED_TABLE, WORKFLOW) VALUES(?, ?)
                             """, created_ins)
         self.connection.commit()
         cursor.close()
@@ -164,7 +169,7 @@ class Store:
     def insert_table_used_in(self, used_ins: List[Tuple[int, int]]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""
-                                INSERT OR IGNORE INTO TABLE_USED_IN(TABLES, WORKFLOWS) VALUES(?, ?)
+                                INSERT OR IGNORE INTO TABLE_USED_IN(USED_TABLE, WORKFLOW) VALUES(?, ?)
                             """, used_ins)
         self.connection.commit()
         cursor.close()

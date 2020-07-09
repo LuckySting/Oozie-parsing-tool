@@ -4,7 +4,7 @@ import re
 import glob
 from time import time
 import sqlparse
-from typing import List, Dict, Generator, Any, Set, Union
+from typing import List, Dict, Generator, Any, Set, Union, Tuple
 from xml.etree.ElementTree import ElementTree, Element
 
 
@@ -413,10 +413,23 @@ def extract_workflows(tables: Dict[str, Dict]) -> Dict[str, Dict]:
     return workflows
 
 
+def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]):
+    table_created_in: Set[Tuple[int, int]] = set()
+    table_used_in: Set[Tuple[int, int]] = set()
+    table_based_on: Set[Tuple[int, int]] = set()
+    for table in tables.values():
+        for workflow_name in table['created_in_workflows']:
+            table_created_in.add((table['index'], workflows[workflow_name]['index']))
+        for workflow_name in table['used_in_workflows']:
+            table_used_in.add((table['index'], workflows[workflow_name]['index']))
+        for table_name in table['based_on_tables']:
+            table_based_on.add((table['index'], tables[table_name]['index']))
+    return table_created_in, table_used_in, table_based_on
+
+
 def parse_workflows_coroutine(working_dir: str) -> Dict:
     paths: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
     all_tables: Dict[str, Dict] = {}
-    all_workflows: Dict[str, Dict] = {}
     f_t_g = find_tables_generator(paths)
     for tables, progress in f_t_g:
         all_tables.update(tables)
@@ -426,11 +439,13 @@ def parse_workflows_coroutine(working_dir: str) -> Dict:
         for key in all_tables[table_name]:
             if isinstance(all_tables[table_name][key], set):
                 all_tables[table_name][key] = list(all_tables[table_name][key])
+    all_workflows = extract_workflows(all_tables)
     for workflow_name in all_workflows:
         for key in all_workflows[workflow_name]:
             if isinstance(all_workflows[workflow_name][key], set):
                 all_workflows[workflow_name][key] = list(all_workflows[workflow_name][key])
-    return all_tables, all_workflows
+    table_created_in, table_used_in, table_based_on = extract_tables_relations(all_tables, all_workflows)
+    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on
 
 
 if __name__ == '__main__':
@@ -438,7 +453,7 @@ if __name__ == '__main__':
     tables: Dict = {}
     workflows: Dict = {}
     try:
-        gen = parse_workflows_coroutine('/home/shared/PycharmProjects/parsing_tool/workflow')
+        gen = parse_workflows_coroutine('/home/shared/PycharmProjects/parsing_tool/workflow_small')
         while True:
             progress: int = next(gen)
             print(f'Progress {progress}/100%')

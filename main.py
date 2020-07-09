@@ -9,7 +9,7 @@ from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QFileDialog, QAbstractItemView
 
 import design
-from store import Store
+from store import Store, Table, Workflow
 from parsing_tool import parse_workflows_coroutine
 
 
@@ -18,15 +18,24 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select Directory'))
         if self.directory_path:
             try:
+                self.loading_progress.setValue(0)
+                self.stackedWidget.setCurrentIndex(1)
                 gen = parse_workflows_coroutine(self.directory_path)
                 while True:
                     progress: int = next(gen)
-                    print(f'Progress {progress}/100%')
+                    self.loading_progress.setValue(progress)
             except StopIteration as ret:
-                tables, workflows = ret.value
+                tables, workflows, table_created_in, table_used_in, table_based_on = ret.value
+                tables = [Table.from_dict(tables[t_n]) for t_n in tables]
+                workflows = [Workflow.from_dict(workflows[w_n]) for w_n in workflows]
+                self.store.create_db_tables(force=True)
+                self.store.insert_tables(tables)
+                self.store.insert_workflows(workflows)
+                self.store.insert_table_based_on(table_based_on)
+                self.store.insert_table_created_in(table_created_in)
+                self.store.insert_table_used_in(table_used_in)
             finally:
-                pass
-            self.store.create_db_tables(force=True)
+                self.stackedWidget.setCurrentIndex(0)
             self.wf_filter_workflows('')
 
     def wf_filter_workflows(self, search_text: str) -> None:
