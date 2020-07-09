@@ -10,23 +10,23 @@ from PyQt5.QtWidgets import QFileDialog, QAbstractItemView
 
 import design
 from store import Store
+from parsing_tool import parse_workflows_coroutine
 
 
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def select_directory(self) -> None:
         self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select Directory'))
         if self.directory_path:
-            workflow_names: List[str] = []
-            for workflow in os.listdir(self.directory_path):
-                workflow_dir = os.path.join(self.directory_path, workflow)
-                try:
-                    list_dir: list = os.listdir(workflow_dir)
-                    if 'workflow.xml' in list_dir:
-                        workflow_names.append(workflow)
-                except NotADirectoryError:
-                    pass
+            try:
+                gen = parse_workflows_coroutine(self.directory_path)
+                while True:
+                    progress: int = next(gen)
+                    print(f'Progress {progress}/100%')
+            except StopIteration as ret:
+                tables, workflows = ret.value
+            finally:
+                pass
             self.store.create_db_tables(force=True)
-            self.store.insert_workflows(workflow_names)
             self.wf_filter_workflows('')
 
     def wf_filter_workflows(self, search_text: str) -> None:

@@ -386,32 +386,68 @@ def link_tables(tables: Dict[str, Dict]) -> Dict[str, Dict]:
                 tables[used_table_name]['based_on_tables'].add(table_name)
 
 
+def extract_workflows(tables: Dict[str, Dict]) -> Dict[str, Dict]:
+    index_g = index_generator(1)
+    workflows: Dict[str, Dict] = {}
+    for table_name in tables:
+        for workflow_name in tables[table_name]['created_in_workflows']:
+            if workflow_name not in workflows:
+                workflows[workflow_name] = {
+                    'index': next(index_g),
+                    'name': workflow_name,
+                    'source_tables': set(),
+                    'effected_tables': {table_name}
+                }
+            else:
+                workflows[workflow_name]['effected_tables'].add(table_name)
+        for workflow_name in tables[table_name]['used_in_workflows']:
+            if workflow_name not in workflows:
+                workflows[workflow_name] = {
+                    'index': next(index_g),
+                    'name': workflow_name,
+                    'source_tables': {table_name},
+                    'effected_tables': set()
+                }
+            else:
+                workflows[workflow_name]['source_tables'].add(table_name)
+    return workflows
+
+
 def parse_workflows_coroutine(working_dir: str) -> Dict:
     paths: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
     all_tables: Dict[str, Dict] = {}
+    all_workflows: Dict[str, Dict] = {}
     f_t_g = find_tables_generator(paths)
     for tables, progress in f_t_g:
         all_tables.update(tables)
         yield progress
     link_tables(all_tables)
-    return all_tables
+    for table_name in all_tables:
+        for key in all_tables[table_name]:
+            if isinstance(all_tables[table_name][key], set):
+                all_tables[table_name][key] = list(all_tables[table_name][key])
+    for workflow_name in all_workflows:
+        for key in all_workflows[workflow_name]:
+            if isinstance(all_workflows[workflow_name][key], set):
+                all_workflows[workflow_name][key] = list(all_workflows[workflow_name][key])
+    return all_tables, all_workflows
 
 
 if __name__ == '__main__':
     t = time()
-    temp: Dict = {}
+    tables: Dict = {}
+    workflows: Dict = {}
     try:
         gen = parse_workflows_coroutine('/home/shared/PycharmProjects/parsing_tool/workflow')
         while True:
             progress: int = next(gen)
             print(f'Progress {progress}/100%')
     except StopIteration as ret:
-        temp = ret.value
-    print(len(temp.keys()))
+        tables, workflows = ret.value
     print(time() - t)
-    for table_name in temp:
-        for key in temp[table_name]:
-            if isinstance(temp[table_name][key], set):
-                temp[table_name][key] = list(temp[table_name][key])
-    with open('temp.json', 'w') as file:
-        json.dump(temp, file)
+
+    with open('result.json', 'w') as file:
+        json.dump({
+            'workflows': workflows,
+            'tables': tables
+        }, file)
