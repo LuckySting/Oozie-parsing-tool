@@ -410,6 +410,16 @@ def extract_workflows(tables: Dict[str, Dict]) -> Dict[str, Dict]:
                 }
             else:
                 workflows[workflow_name]['source_tables'].add(table_name)
+        for workflow_name in tables[table_name]['updated_in_workflows']:
+            if workflow_name not in workflows:
+                workflows[workflow_name] = {
+                    'index': next(index_g),
+                    'name': workflow_name,
+                    'source_tables': set(),
+                    'effected_tables': {table_name}
+                }
+            else:
+                workflows[workflow_name]['source_tables'].add(table_name)
     return workflows
 
 
@@ -417,14 +427,17 @@ def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]
     table_created_in: Set[Tuple[int, int]] = set()
     table_used_in: Set[Tuple[int, int]] = set()
     table_based_on: Set[Tuple[int, int]] = set()
+    table_updated_in: Set[Tuple[int, int]] = set()
     for table in tables.values():
         for workflow_name in table['created_in_workflows']:
             table_created_in.add((table['index'], workflows[workflow_name]['index']))
         for workflow_name in table['used_in_workflows']:
             table_used_in.add((table['index'], workflows[workflow_name]['index']))
+        for workflow_name in table['updated_in_workflows']:
+            table_updated_in.add((table['index'], workflows[workflow_name]['index']))
         for table_name in table['based_on_tables']:
             table_based_on.add((table['index'], tables[table_name]['index']))
-    return table_created_in, table_used_in, table_based_on
+    return table_created_in, table_used_in, table_based_on, table_updated_in
 
 
 def parse_workflows_coroutine(working_dir: str) -> Dict:
@@ -444,8 +457,8 @@ def parse_workflows_coroutine(working_dir: str) -> Dict:
         for key in all_workflows[workflow_name]:
             if isinstance(all_workflows[workflow_name][key], set):
                 all_workflows[workflow_name][key] = list(all_workflows[workflow_name][key])
-    table_created_in, table_used_in, table_based_on = extract_tables_relations(all_tables, all_workflows)
-    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on
+    table_created_in, table_used_in, table_based_on, table_updated_in = extract_tables_relations(all_tables, all_workflows)
+    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on, table_updated_in
 
 
 if __name__ == '__main__':

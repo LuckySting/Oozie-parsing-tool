@@ -1,18 +1,28 @@
 import sqlite3
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Set
 
 
 class Table:
-    def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: bool,
-                 created_in_workflows: List[str],
-                 updated_in_workflows: List[str], based_on_tables: List[str]):
+    def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
+                 created_in_workflows=None,
+                 used_in_workflows=None,
+                 updated_in_workflows=None, based_on_tables=None):
+        if updated_in_workflows is None:
+            updated_in_workflows = list()
+        if based_on_tables is None:
+            based_on_tables = list()
+        if created_in_workflows is None:
+            created_in_workflows = list()
+        if used_in_workflows is None:
+            used_in_workflows = list()
         self.index: int = index
         self.name: str = name
         self.meaning: str = meaning
         self.authors: str = authors
-        self.sqooped: bool = sqooped
+        self.sqooped: bool = bool(sqooped)
         self.created_in_workflows: List[str] = created_in_workflows
         self.updated_in_workflows: List[str] = updated_in_workflows
+        self.used_in_workflows: List[str] = used_in_workflows
         self.based_on_tables: List[str] = based_on_tables
 
     @staticmethod
@@ -103,6 +113,21 @@ class Store:
                 CONSTRAINT TBO_PK PRIMARY KEY(TARGET_TABLE, BASE_TABLE)
             );
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS TABLE_UPDATED_IN
+            (
+                UPDATED_TABLE REFERENCES TABLES,
+                WORKFLOW REFERENCES WORKFLOWS,
+                CONSTRAINT TUI_PK PRIMARY KEY(UPDATED_TABLE, WORKFLOW)
+            );
+        """)
+        cursor.close()
+
+    def update_table(self, table: Table) -> None:
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.execute('UPDATE TABLES SET MEANING=?, AUTHORS=? WHERE ID = ?',
+                       (table.meaning, table.authors, table.index))
+        self.connection.commit()
         cursor.close()
 
     def get_tables(self, search_text: str = '', only_names: bool = False) -> List[Union[str, Table]]:
@@ -142,6 +167,73 @@ class Store:
             return [d[1] for d in workflows]
         return [Workflow(*d) for d in workflows]
 
+    def populate_workflows_data(self, workflows: List[Workflow]):
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        relations: List[Tuple] = cursor.execute(
+            'SELECT TBO.TARGET_TABLE, TBO.BASE_TABLE FROM TABLE_BASED_ON TBO JOIN TABLES T WHERE TBO.BASE_TABLE = T.ID;'
+        ).fetchall()
+        relations_dict: Dict[int, Set[int]] = {}
+        for r in relations:
+            if r[0] not in relations_dict:
+                relations_dict[r[0]] = {r[1]}
+            else:
+                relations_dict[r[0]].add(r[1])
+
+        for workflow in workflows:
+            used_tables: List[Tuple] = cursor.execute(
+                'SELECT TABLES.ID, TABLES.NAME FROM TABLE_USED_IN JOIN TABLES WHERE WORKFLOW = ? AND USED_TABLE = TABLES.ID;',
+                (workflow.index,)
+            ).fetchall()
+            used_tables_dict: Dict[int, str] = {t[0]: t[1] for t in used_tables}
+            used_tables: Set[int] = set(used_tables_dict.keys())
+            src_tables: Set[int] = set()
+            pot_tables: Set[int] = used_tables.copy()
+            pas_tables: Set[int] = set()
+            while len(pot_tables):
+                t_i = pot_tables.pop()
+                if t_i not in relations_dict:
+                    if t_i in used_tables_dict:
+                        pas_tables.add(t_i)
+                        continue
+                else:
+                    src_tbs = relations_dict[t_i].difference(pas_tables)
+                    pas_tables.add(t_i)
+                    pot_tables.update(src_tbs)
+                    for t_n in src_tbs:
+                        if t_n in used_tables_dict:
+                            src_tables.add(t_n)
+            effected_tables = used_tables.difference(src_tables)
+            workflow.effected_tables += [used_tables_dict[t_i] for t_i in effected_tables]
+            workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
+        cursor.close()
+
+    def populate_table_data(self, table: Table):
+        # updated in
+        # based on sqooped
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        used_in = cursor.execute("""
+            SELECT WORKFLOWS.NAME FROM TABLE_USED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_USED_IN.WORKFLOW AND USED_TABLE = ?
+        """, (table.index,)).fetchall()
+        used_in = {u[0] for u in used_in}
+        created_in = cursor.execute("""
+                    SELECT WORKFLOWS.NAME FROM TABLE_CREATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_CREATED_IN.WORKFLOW AND CREATED_TABLE = ?
+                """, (table.index,)).fetchall()
+        created_in = {c[0] for c in created_in}
+        updated_in = cursor.execute("""
+                            SELECT WORKFLOWS.NAME FROM TABLE_UPDATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_UPDATED_IN.WORKFLOW AND UPDATED_TABLE = ?
+                        """, (table.index,)).fetchall()
+        updated_in = {u[0] for u in updated_in}
+        based_on = cursor.execute("""
+                                    SELECT TABLES.NAME FROM TABLE_BASED_ON JOIN TABLES ON TABLES.ID = BASE_TABLE AND TARGET_TABLE = ?
+                                """, (table.index,)).fetchall()
+        based_on = {b[0] for b in based_on}
+        used_in = used_in.difference(created_in)
+        used_in = used_in.difference(updated_in)
+        table.created_in_workflows += list(created_in)
+        table.used_in_workflows += list(used_in)
+        table.updated_in_workflows += list(updated_in)
+        table.based_on_tables += list(based_on)
+
     def insert_tables(self, tables: List[Table]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""
@@ -179,5 +271,13 @@ class Store:
         cursor.executemany("""
                                 INSERT OR IGNORE INTO TABLE_BASED_ON(TARGET_TABLE, BASE_TABLE) VALUES(?, ?)
                             """, based_ons)
+        self.connection.commit()
+        cursor.close()
+
+    def insert_table_updated_in(self, updated_ins: List[Tuple[int, int]]):
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.executemany("""
+                                INSERT OR IGNORE INTO TABLE_UPDATED_IN(UPDATED_TABLE, WORKFLOW) VALUES(?, ?)
+                            """, updated_ins)
         self.connection.commit()
         cursor.close()

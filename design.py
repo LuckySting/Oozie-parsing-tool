@@ -279,7 +279,7 @@ class Ui_MainWindow(object):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Parsing tool"))
         self.db_table_search.setPlaceholderText(_translate("MainWindow", "Search table... "))
-        self.db_source_label.setText(_translate("MainWindow", "Based on sqooped tables"))
+        self.db_source_label.setText(_translate("MainWindow", "Based on tables"))
         self.db_source_label_2.setText(_translate("MainWindow", "Used in workflows"))
         self.db_source_label_3.setText(_translate("MainWindow", "Used in Tableau workbooks"))
         self.db_description_input.setPlaceholderText(_translate("MainWindow", "Table meaning..."))
