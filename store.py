@@ -6,7 +6,9 @@ class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
                  created_in_workflows=None,
                  used_in_workflows=None,
-                 updated_in_workflows=None, based_on_tables=None):
+                 updated_in_workflows=None, based_on_tables=None, partitions=None):
+        if partitions is None:
+            partitions = list()
         if updated_in_workflows is None:
             updated_in_workflows = list()
         if based_on_tables is None:
@@ -24,6 +26,7 @@ class Table:
         self.updated_in_workflows: List[str] = updated_in_workflows
         self.used_in_workflows: List[str] = used_in_workflows
         self.based_on_tables: List[str] = based_on_tables
+        self.partitions: List[str] = partitions
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
@@ -72,6 +75,7 @@ class Store:
             cursor.execute('DROP TABLE IF EXISTS TABLE_CREATED_IN;')
             cursor.execute('DROP TABLE IF EXISTS TABLE_USED_IN;')
             cursor.execute('DROP TABLE IF EXISTS TABLE_BASED_ON;')
+            cursor.execute('DROP TABLE IF EXISTS TABLE_PARTITIONS;')
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS TABLES
             (
@@ -119,6 +123,14 @@ class Store:
                 UPDATED_TABLE REFERENCES TABLES,
                 WORKFLOW REFERENCES WORKFLOWS,
                 CONSTRAINT TUI_PK PRIMARY KEY(UPDATED_TABLE, WORKFLOW)
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS TABLE_PARTITIONS
+            (
+                TARGET_TABLE REFERENCES TABLES,
+                PARTITION_NAME TEXT NOT NULL,
+                CONSTRAINT TP_PK PRIMARY KEY(TARGET_TABLE, PARTITION_NAME)
             );
         """)
         cursor.close()
@@ -227,12 +239,18 @@ class Store:
                                     SELECT TABLES.NAME FROM TABLE_BASED_ON JOIN TABLES ON TABLES.ID = BASE_TABLE AND TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
         based_on = {b[0] for b in based_on}
+        partitions = cursor.execute("""
+                                    SELECT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
+                                """, (table.index,)).fetchall()
+        partitions = {p[0] for p in partitions}
+        cursor.close()
         used_in = used_in.difference(created_in)
         used_in = used_in.difference(updated_in)
         table.created_in_workflows += list(created_in)
         table.used_in_workflows += list(used_in)
         table.updated_in_workflows += list(updated_in)
         table.based_on_tables += list(based_on)
+        table.partitions += list(partitions)
 
     def insert_tables(self, tables: List[Table]):
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -279,5 +297,13 @@ class Store:
         cursor.executemany("""
                                 INSERT OR IGNORE INTO TABLE_UPDATED_IN(UPDATED_TABLE, WORKFLOW) VALUES(?, ?)
                             """, updated_ins)
+        self.connection.commit()
+        cursor.close()
+
+    def insert_table_partitions(self, table_partitions: List[Tuple[int, str]]):
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.executemany("""
+                                        INSERT OR IGNORE INTO TABLE_PARTITIONS(TARGET_TABLE, PARTITION_NAME) VALUES(?, ?)
+                                    """, table_partitions)
         self.connection.commit()
         cursor.close()

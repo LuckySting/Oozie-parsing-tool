@@ -220,8 +220,14 @@ def parse_hql_create(statement: sqlparse.sql.Statement, workflow_name: str) -> L
         'used_in_workflows': set(),
         'based_on_tables': set(),
         'used_by_tables': set(),
-        'updated_in_workflows': set()
+        'updated_in_workflows': set(),
+        'partitions': set()
     }
+    partitions = re.search(r'partitioned by \([\s\w]+\)', statement.normalized, re.IGNORECASE)
+    if partitions:
+        word_list = partitions.group(0).lower().replace('partitioned by (', '').replace(')', '').split(' ')
+        partitions = {word_list[i] for i in range(len(word_list)) if i % 2 == 0}
+        table['partitions'].update(partitions)
     for table_name in table_names[1:]:
         table['based_on_tables'].add(table_name)
         output.append({
@@ -232,7 +238,8 @@ def parse_hql_create(statement: sqlparse.sql.Statement, workflow_name: str) -> L
             'used_in_workflows': {workflow_name},
             'based_on_tables': set(),
             'used_by_tables': {table['name']},
-            'updated_in_workflows': set()
+            'updated_in_workflows': set(),
+            'partitions': set()
         })
     output.append(table)
     return output
@@ -269,7 +276,8 @@ def parse_hql_insert(statement: sqlparse.sql.Statement, workflow_name: str) -> L
         'used_in_workflows': {workflow_name},
         'based_on_tables': set(),
         'used_by_tables': set(),
-        'updated_in_workflows': {workflow_name}
+        'updated_in_workflows': {workflow_name},
+        'partitions': set()
     }
     for table_name in table_names[1:]:
         table['based_on_tables'].add(table_name)
@@ -281,7 +289,8 @@ def parse_hql_insert(statement: sqlparse.sql.Statement, workflow_name: str) -> L
             'used_in_workflows': {workflow_name},
             'based_on_tables': set(),
             'used_by_tables': {table['name']},
-            'updated_in_workflows': set()
+            'updated_in_workflows': set(),
+            'partitions': set()
         })
     output.append(table)
     return output
@@ -330,6 +339,7 @@ def parse_workflow(path_to_workflow_xml: str) -> Dict[str, Dict]:
                             tables[table['name']]['updated_in_workflows'].update(table['updated_in_workflows'])
                             tables[table['name']]['based_on_tables'].update(table['based_on_tables'])
                             tables[table['name']]['used_by_tables'].update(table['used_by_tables'])
+                            tables[table['name']]['partitions'].update(table['partitions'])
                 elif 'sqoop' in el_.tag:
                     table_name: str = parse_sqoop(el_)
                     table_name: str = replace_global(table_name, r_g)
@@ -342,7 +352,8 @@ def parse_workflow(path_to_workflow_xml: str) -> Dict[str, Dict]:
                             'used_in_workflows': set(),
                             'updated_in_workflows': set(),
                             'based_on_tables': set(),
-                            'used_by_tables': set()
+                            'used_by_tables': set(),
+                            'partitions': set()
                         }
                     else:
                         tables[table_name]['sqooped'] = True
@@ -428,6 +439,7 @@ def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]
     table_used_in: Set[Tuple[int, int]] = set()
     table_based_on: Set[Tuple[int, int]] = set()
     table_updated_in: Set[Tuple[int, int]] = set()
+    table_partitions: Set[Tuple[int, str]] = set()
     for table in tables.values():
         for workflow_name in table['created_in_workflows']:
             table_created_in.add((table['index'], workflows[workflow_name]['index']))
@@ -437,7 +449,9 @@ def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]
             table_updated_in.add((table['index'], workflows[workflow_name]['index']))
         for table_name in table['based_on_tables']:
             table_based_on.add((table['index'], tables[table_name]['index']))
-    return table_created_in, table_used_in, table_based_on, table_updated_in
+        for table_name in table['partitions']:
+            table_partitions.add((table['index'], table_name))
+    return table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions
 
 
 def parse_workflows_coroutine(working_dir: str) -> Dict:
@@ -457,8 +471,8 @@ def parse_workflows_coroutine(working_dir: str) -> Dict:
         for key in all_workflows[workflow_name]:
             if isinstance(all_workflows[workflow_name][key], set):
                 all_workflows[workflow_name][key] = list(all_workflows[workflow_name][key])
-    table_created_in, table_used_in, table_based_on, table_updated_in = extract_tables_relations(all_tables, all_workflows)
-    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on, table_updated_in
+    table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions = extract_tables_relations(all_tables, all_workflows)
+    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions
 
 
 if __name__ == '__main__':

@@ -24,7 +24,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     progress: int = next(gen)
                     self.loading_progress.setValue(progress)
             except StopIteration as ret:
-                tables, workflows, table_created_in, table_used_in, table_based_on, table_updated_in = ret.value
+                tables, workflows, table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions = ret.value
                 tables = [Table.from_dict(tables[t_n]) for t_n in tables]
                 workflows = [Workflow.from_dict(workflows[w_n]) for w_n in workflows]
                 self.store.create_db_tables(force=True)
@@ -34,6 +34,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.store.insert_table_created_in(table_created_in)
                 self.store.insert_table_used_in(table_used_in)
                 self.store.insert_table_updated_in(table_updated_in)
+                self.store.insert_table_partitions(table_partitions)
             finally:
                 self.stackedWidget.setCurrentIndex(0)
             self.wf_filter_workflows('')
@@ -78,6 +79,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_created_at_list_model.clear()
             self.db_updated_in_list_model.clear()
             self.db_workflow_list_model.clear()
+            self.db_partitions_list_model.clear()
             for s in self.current_table.based_on_tables:
                 item = QStandardItem(s)
                 item.setEditable(False)
@@ -94,6 +96,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_workflow_list_model.appendRow(item)
+            for s in self.current_table.partitions:
+                item = QStandardItem(s)
+                item.setEditable(False)
+                self.db_partitions_list_model.appendRow(item)
 
     def save_db_fields(self) -> None:
         if self.current_table:
@@ -139,6 +145,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_sqooped_list.setModel(self.db_sqooped_list_model)
         self.db_workflow_list_model = QStandardItemModel(self.db_workflow_list)
         self.db_workflow_list.setModel(self.db_workflow_list_model)
+        self.db_partitions_list_model = QStandardItemModel(self.db_partitions_list)
+        self.db_partitions_list.setModel(self.db_partitions_list_model)
 
         self.db_table_search.textChanged.connect(self.db_filter_tables)
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
