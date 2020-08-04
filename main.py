@@ -39,6 +39,51 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.stackedWidget.setCurrentIndex(0)
             self.wf_filter_workflows('')
 
+    def update_from_dump_coroutine(self, tables_list: List[str]) -> bool:
+        progress: int = 0
+        length: int = len(tables_list)
+        self.store.delete_tables(tables_list)
+        for table_name in tables_list:
+            without_schema: str = table_name.split('.')[1]
+            tables: List[Table] = self.store.get_tables_by_names([table_name, without_schema])
+            if len(tables) != 0:
+                for table in tables:
+                    table.name = table_name
+                    self.store.update_table(table)
+            else:
+                self.store.insert_new_table(table_name)
+            progress += 1
+            yield int((progress / length * 100) + 1)
+        self.store.delete_tables(tables_list)
+        return True
+
+    def extract_schema(self) -> None:
+        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select schema file')[0])
+        if schema_filepath:
+            tables_list: List[str] = []
+            with open(schema_filepath, 'r') as file:
+                schema: str = ''
+                for line in file.readlines():
+                    if 'schema' in line:
+                        schema: str = line.split(':')[1].strip() + '.'
+                    elif '+' in line or 'tab_name' in line:
+                        continue
+                    else:
+                        table_name: str = line.split('|')[1].strip()
+                        tables_list.append(schema + table_name)
+            try:
+                self.loading_progress.setValue(0)
+                self.stackedWidget.setCurrentIndex(1)
+                gen = self.update_from_dump_coroutine(tables_list)
+                while True:
+                    progress: int = next(gen)
+                    self.loading_progress.setValue(progress)
+            except StopIteration as ret:
+                pass
+            finally:
+                self.stackedWidget.setCurrentIndex(0)
+            self.db_filter_tables('')
+
     def wf_filter_workflows(self, search_text: str) -> None:
         self.wf_workflow_list_model.clear()
         for workflow in self.store.get_workflows(search_text, only_names=True):
@@ -109,10 +154,13 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def db_select_tables(self) -> None:
         table_name: str = self.db_table_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
-        table: Table = self.store.get_tables(table_name)[0]
-        self.store.populate_table_data(table)
-        self.current_table = table
-        self.fill_db_fields()
+        try:
+            table: Table = self.store.get_tables(table_name)[0]
+            self.store.populate_table_data(table)
+            self.current_table = table
+            self.fill_db_fields()
+        except IndexError:
+            pass
 
     def __init__(self):
         super().__init__()
@@ -130,7 +178,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_effected_list.setModel(self.wf_effected_list_model)
 
         self.actionOpen.triggered.connect(self.select_directory)
-
+        self.actionOpen_extract_schema.triggered.connect(self.extract_schema)
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
         self.wf_filter_workflows('')

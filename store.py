@@ -154,7 +154,7 @@ class Store:
 
     def get_tables_by_names(self, table_names: List[str]) -> List[Table]:
         cursor: sqlite3.Cursor = self.connection.cursor()
-        sql: str = 'SELECT ID, NAME FROM WORKFLOWS WHERE 1=0'
+        sql: str = 'SELECT * FROM TABLES WHERE 1=0'
         for name in table_names:
             sql += f' OR NAME = "{name}"'
         tables: List[Tuple] = cursor.execute(sql).fetchall()
@@ -252,6 +252,16 @@ class Store:
         table.based_on_tables += list(based_on)
         table.partitions += list(partitions)
 
+    def insert_new_table(self, table_name) -> Table:
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO 
+            TABLES(ID, NAME, MEANING, AUTHORS)
+            VALUES((SELECT MAX(ID) + 1 FROM TABLES), ?, '', '') 
+        """, (table_name,))
+        self.connection.commit()
+        cursor.close()
+
     def insert_tables(self, tables: List[Table]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""
@@ -305,5 +315,18 @@ class Store:
         cursor.executemany("""
                                         INSERT OR IGNORE INTO TABLE_PARTITIONS(TARGET_TABLE, PARTITION_NAME) VALUES(?, ?)
                                     """, table_partitions)
+        self.connection.commit()
+        cursor.close()
+
+    def delete_tables(self, except_table_names: Tuple = tuple()):
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        sql: str = """DELETE FROM TABLES WHERE NAME NOT IN ("""
+        for table_name in except_table_names:
+            sql += f"""'{table_name}',"""
+        if sql[-1] == ',':
+            sql = sql[:-1]
+        sql += """)"""
+        print(sql)
+        cursor.execute(sql)
         self.connection.commit()
         cursor.close()
