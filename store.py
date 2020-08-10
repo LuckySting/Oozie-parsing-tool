@@ -41,15 +41,22 @@ class Table:
 
 
 class Workflow:
-    def __init__(self, index: int, name: str, source_tables=None, effected_tables=None):
+    def __init__(self, index: int, name: str, source_tables=None, effected_tables=None, predecessors=None,
+                 descendants=None):
         if source_tables is None:
-            source_tables = []
+            source_tables = list()
         if effected_tables is None:
             effected_tables = list()
+        if predecessors is None:
+            predecessors = list()
+        if descendants is None:
+            descendants = list()
         self.index: int = index
         self.name: str = name
         self.source_tables: List[str] = source_tables
         self.effected_tables: List[str] = effected_tables
+        self.predecessors: List[str] = predecessors
+        self.descendants: List[str] = descendants
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
@@ -217,6 +224,27 @@ class Store:
             effected_tables = used_tables.difference(src_tables)
             workflow.effected_tables += [used_tables_dict[t_i] for t_i in effected_tables]
             workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
+            predecessors_sql: str = f"""
+                SELECT DISTINCT WORKFLOWS.NAME
+                FROM WORKFLOWS JOIN
+                (
+                    SELECT CREATED_TABLE AS T_ID, WORKFLOW AS W_ID FROM TABLE_CREATED_IN
+                    UNION
+                    SELECT * FROM TABLE_UPDATED_IN
+                )
+                on WORKFLOWS.ID = W_ID
+                JOIN TABLES WHERE T_ID = TABLES.ID
+                AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.source_tables])[:-2]});
+            """
+            descendants_sql: str = f"""
+                SELECT DISTINCT WORKFLOWS.NAME
+                FROM WORKFLOWS JOIN TABLE_USED_IN
+                on WORKFLOWS.ID = WORKFLOW
+                JOIN TABLES WHERE USED_TABLE = TABLES.ID
+                AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.effected_tables])[:-2]});
+            """
+            workflow.predecessors = [t[0] for t in cursor.execute(predecessors_sql).fetchall() if t[0] != workflow.name]
+            workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if t[0] != workflow.name and t[0] not in workflow.predecessors]
         cursor.close()
 
     def populate_table_data(self, table: Table):

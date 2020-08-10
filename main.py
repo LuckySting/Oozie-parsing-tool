@@ -99,6 +99,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.store.populate_workflows_data(workflows)
         self.wf_effected_list_model.clear()
         self.wf_source_list_model.clear()
+        self.wf_predecessors_list_model.clear()
+        self.wf_descendants_list_model.clear()
         for workflow in workflows:
             for ef_t in workflow.effected_tables:
                 item = QStandardItem(ef_t)
@@ -108,6 +110,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 item = QStandardItem(src_t)
                 item.setEditable(False)
                 self.wf_source_list_model.appendRow(item)
+            for p_w in workflow.predecessors:
+                item = QStandardItem(p_w)
+                item.setEditable(False)
+                self.wf_predecessors_list_model.appendRow(item)
+            for d_w in workflow.descendants:
+                item = QStandardItem(d_w)
+                item.setEditable(False)
+                self.wf_descendants_list_model.appendRow(item)
 
     def db_filter_tables(self, search_text: str) -> None:
         self.db_table_list_model.clear()
@@ -176,6 +186,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_source_list.setModel(self.wf_source_list_model)
         self.wf_effected_list_model = QStandardItemModel(self.wf_effected_list)
         self.wf_effected_list.setModel(self.wf_effected_list_model)
+        self.wf_predecessors_list_model = QStandardItemModel(self.wf_predecessors_list)
+        self.wf_predecessors_list.setModel(self.wf_predecessors_list_model)
+        self.wf_descendants_list_model = QStandardItemModel(self.wf_descendants_list)
+        self.wf_descendants_list.setModel(self.wf_descendants_list_model)
 
         self.actionOpen.triggered.connect(self.select_directory)
         self.actionOpen_extract_schema.triggered.connect(self.extract_schema)
