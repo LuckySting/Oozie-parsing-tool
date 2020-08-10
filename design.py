@@ -39,7 +39,7 @@ class Ui_MainWindow(object):
         self.db_tab.setCursor(QtGui.QCursor(QtCore.Qt.ArrowCursor))
         self.db_tab.setObjectName("db_tab")
         self.db_table_list = QtWidgets.QListView(self.db_tab)
-        self.db_table_list.setGeometry(QtCore.QRect(10, 50, 191, 491))
+        self.db_table_list.setGeometry(QtCore.QRect(10, 70, 191, 471))
         self.db_table_list.setObjectName("db_table_list")
         self.db_table_search = QtWidgets.QLineEdit(self.db_tab)
         self.db_table_search.setGeometry(QtCore.QRect(10, 10, 191, 28))
@@ -141,6 +141,9 @@ class Ui_MainWindow(object):
         self.db_save_button.raise_()
         self.db_authors_input.raise_()
         self.db_created_at_list.raise_()
+        self.db_toggle_to_independent = QtWidgets.QCheckBox(self.db_tab)
+        self.db_toggle_to_independent.setGeometry(QtCore.QRect(10, 40, 191, 21))
+        self.db_toggle_to_independent.setObjectName("db_toggle_to_independent")
         self.tabWidget.addTab(self.db_tab, "")
         self.wf_tab = QtWidgets.QWidget()
         self.wf_tab.setAutoFillBackground(False)
@@ -287,7 +290,7 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
         self.stackedWidget.setCurrentIndex(0)
-        self.tabWidget.setCurrentIndex(1)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -304,6 +307,7 @@ class Ui_MainWindow(object):
         self.db_updated_in_label.setText(_translate("MainWindow", "Updated at"))
         self.db_save_button.setText(_translate("MainWindow", "Save"))
         self.db_authors_input.setPlaceholderText(_translate("MainWindow", "Table authors..."))
+        self.db_toggle_to_independent.setText(_translate("MainWindow", "Toggle to independent"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.db_tab), _translate("MainWindow", "Databases"))
         self.wf_workflow_search.setPlaceholderText(_translate("MainWindow", "Search workflow... "))
         self.wf_effected_label.setText(_translate("MainWindow", "Effected tables (insert/update)"))

@@ -121,10 +121,17 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def db_filter_tables(self, search_text: str) -> None:
         self.db_table_list_model.clear()
-        for table in self.store.get_tables(search_text, only_names=True):
-            item = QStandardItem(table)
-            item.setEditable(False)
-            self.db_table_list_model.appendRow(item)
+        for table in self.store.get_tables(search_text):
+            if len(table.updated_in_workflows) or len(table.created_in_workflows) or len(table.used_in_workflows):
+                if not self.independent:
+                    item = QStandardItem(table.name)
+                    item.setEditable(False)
+                    self.db_table_list_model.appendRow(item)
+            else:
+                if self.independent:
+                    item = QStandardItem(table.name)
+                    item.setEditable(False)
+                    self.db_table_list_model.appendRow(item)
 
     def fill_db_fields(self) -> None:
         if self.current_table:
@@ -172,11 +179,16 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         except IndexError:
             pass
 
+    def db_change_tables_filter(self, v: bool):
+        self.independent = v
+        self.db_filter_tables('')
+
     def __init__(self):
         super().__init__()
         self.store: Store = Store('db.sqlite3')
         self.directory_path: str = None
         self.current_table: Table = None
+        self.independent: bool = False
         self.setupUi(self)
 
         self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
@@ -213,6 +225,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_table_search.textChanged.connect(self.db_filter_tables)
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
         self.db_save_button.clicked.connect(self.save_db_fields)
+        self.db_toggle_to_independent.stateChanged.connect(self.db_change_tables_filter)
         self.db_filter_tables('')
 
 

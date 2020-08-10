@@ -157,7 +157,7 @@ class Store:
         cursor.close()
         if only_names:
             return [d[1] for d in tables]
-        return [Table(*d) for d in tables]
+        return [self.populate_table_data(Table(*d)) for d in tables]
 
     def get_tables_by_names(self, table_names: List[str]) -> List[Table]:
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -247,7 +247,7 @@ class Store:
             workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if t[0] != workflow.name and t[0] not in workflow.predecessors]
         cursor.close()
 
-    def populate_table_data(self, table: Table):
+    def populate_table_data(self, table: Table) -> Table:
         # updated in
         # based on sqooped
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -279,6 +279,7 @@ class Store:
         table.updated_in_workflows += list(updated_in)
         table.based_on_tables += list(based_on)
         table.partitions += list(partitions)
+        return table
 
     def insert_new_table(self, table_name) -> Table:
         cursor: sqlite3.Cursor = self.connection.cursor()
