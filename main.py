@@ -203,8 +203,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_descendants_list_model = QStandardItemModel(self.wf_descendants_list)
         self.wf_descendants_list.setModel(self.wf_descendants_list_model)
 
-        self.actionOpen.triggered.connect(self.select_directory)
-        self.actionOpen_extract_schema.triggered.connect(self.extract_schema)
+        self.action_open_workflows.triggered.connect(self.select_directory)
+        self.action_extract_hive.triggered.connect(self.extract_schema)
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
         self.wf_filter_workflows('')
@@ -225,7 +225,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_table_search.textChanged.connect(self.db_filter_tables)
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
         self.db_save_button.clicked.connect(self.save_db_fields)
-        self.db_toggle_to_independent.stateChanged.connect(self.db_change_tables_filter)
+        self.db_show_only_unplugged.stateChanged.connect(self.db_change_tables_filter)
         self.db_filter_tables('')
 
 
