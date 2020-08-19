@@ -20,14 +20,15 @@ class Color(Enum):
             return QColor(color.value)
 
 
-
-
 class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
                  color: Union[Color, str] = Color.NONE,
+                 columns=None,
                  created_in_workflows=None,
                  used_in_workflows=None,
                  updated_in_workflows=None, based_on_tables=None, partitions=None):
+        if columns is None:
+            columns = list()
         if partitions is None:
             partitions = list()
         if updated_in_workflows is None:
@@ -43,6 +44,7 @@ class Table:
         self.meaning: str = meaning
         self.authors: str = authors
         self.color: Color = color if not isinstance(color, str) else Color(color)
+        self.columns: List[str] = columns
         self.sqooped: bool = bool(sqooped)
         self.created_in_workflows: List[str] = created_in_workflows
         self.updated_in_workflows: List[str] = updated_in_workflows
@@ -52,8 +54,7 @@ class Table:
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
-        return Table(data['index'], data['name'], '', '', data['sqooped'], data['created_in_workflows'],
-                     data['updated_in_workflows'], data['based_on_tables'])
+        return Table(**data)
 
     def __str__(self):
         return f'{self.index}. {self.name}'
@@ -86,10 +87,10 @@ class Workflow:
         return Workflow(**data)
 
     def __str__(self):
-        return self.name
+        return f'{self.index}. {self.name}'
 
     def __repr__(self):
-        return str(self.name)
+        return f'Workflow({str(self)})'
 
 
 class Store:
@@ -106,6 +107,7 @@ class Store:
             cursor.execute('DROP TABLE IF EXISTS TABLE_USED_IN;')
             cursor.execute('DROP TABLE IF EXISTS TABLE_BASED_ON;')
             cursor.execute('DROP TABLE IF EXISTS TABLE_PARTITIONS;')
+            cursor.execute('DROP TABLE IF EXISTS TABLE_COLUMNS;')
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS TABLES
             (
@@ -165,6 +167,15 @@ class Store:
                 CONSTRAINT TP_PK PRIMARY KEY(TARGET_TABLE, PARTITION_NAME)
             );
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS TABLE_COLUMNS
+            (
+                TABLE_ID REFERENCES TABLES,
+                COLUMN_NAME TEXT NOT NULL UNIQUE,
+                COLUMN_TYPE TEXT NOT NULL,
+                CONSTRAINT TC_PK PRIMARY KEY(TABLE_ID, COLUMN_NAME)
+            );
+        """)
         cursor.close()
 
     def update_table(self, table: Table) -> None:
@@ -174,7 +185,7 @@ class Store:
         self.connection.commit()
         cursor.close()
 
-    def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False) -> List[Union[str, Table]]:
+    def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False, id_name_pairs: bool = False) -> List[Union[str, Table, Tuple[int, str]]]:
         if color_filter is None:
             color_filter = []
         sql: str = 'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED, COLOR FROM TABLES WHERE instr(NAME, ?) > 0'
@@ -186,13 +197,14 @@ class Store:
         cursor.close()
         if only_names:
             return [d[1] for d in tables]
+        if id_name_pairs:
+            return [(d[0], d[1]) for d in tables]
         return [self.populate_table_data(Table(*d)) for d in tables]
 
     def get_tables_by_names(self, table_names: List[str]) -> List[Table]:
         cursor: sqlite3.Cursor = self.connection.cursor()
-        sql: str = 'SELECT * FROM TABLES WHERE 1=0'
-        for name in table_names:
-            sql += f' OR NAME = "{name}"'
+        sql: str = 'SELECT * FROM TABLES WHERE NAME IN ('
+        sql += ', '.join([f"'{t_n}'" for t_n in table_names]) + ')'
         tables: List[Tuple] = cursor.execute(sql).fetchall()
         cursor.close()
         return [Table(*d) for d in tables]
@@ -214,6 +226,20 @@ class Store:
         if only_names:
             return [d[1] for d in workflows]
         return [Workflow(*d) for d in workflows]
+
+    def get_db_status(self) -> str:
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        workflows_exists: bool = int(cursor.execute('SELECT COUNT(*) FROM WORKFLOWS').fetchall()[0][0]) > 0
+        tables_exists: bool = int(cursor.execute('SELECT COUNT(*) FROM TABLES').fetchall()[0][0]) > 0
+        columns_exists: bool = int(cursor.execute('SELECT COUNT(*) FROM TABLE_COLUMNS').fetchall()[0][0]) > 0
+        if tables_exists and not columns_exists and not workflows_exists:
+            return 'hive_extracted'
+        elif tables_exists and columns_exists and not workflows_exists:
+            return 'impala_extracted'
+        elif tables_exists and columns_exists and workflows_exists:
+            return 'workflows_computed'
+        else:
+            return 'db_empty'
 
     def populate_workflows_data(self, workflows: List[Workflow]):
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -278,8 +304,6 @@ class Store:
         cursor.close()
 
     def populate_table_data(self, table: Table) -> Table:
-        # updated in
-        # based on sqooped
         cursor: sqlite3.Cursor = self.connection.cursor()
         used_in = cursor.execute("""
             SELECT WORKFLOWS.NAME FROM TABLE_USED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_USED_IN.WORKFLOW AND USED_TABLE = ?
@@ -301,6 +325,10 @@ class Store:
                                     SELECT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
         partitions = {p[0] for p in partitions}
+        columns = cursor.execute("""
+                                SELECT COLUMN_NAME||'['||COLUMN_TYPE||']' FROM TABLE_COLUMNS WHERE TABLE_ID = ?
+                                """, (table.index, )).fetchall()
+        columns = {c[0] for c in columns}
         cursor.close()
         used_in = used_in.difference(created_in)
         used_in = used_in.difference(updated_in)
@@ -309,6 +337,7 @@ class Store:
         table.updated_in_workflows += list(updated_in)
         table.based_on_tables += list(based_on)
         table.partitions += list(partitions)
+        table.columns += list(columns)
         return table
 
     def insert_new_table(self, table_name) -> Table:
@@ -320,6 +349,7 @@ class Store:
         """, (table_name,))
         self.connection.commit()
         cursor.close()
+        return self.get_tables_by_names([table_name])[0]
 
     def insert_tables(self, tables: List[Table]):
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -374,6 +404,15 @@ class Store:
         cursor.executemany("""
                                         INSERT OR IGNORE INTO TABLE_PARTITIONS(TARGET_TABLE, PARTITION_NAME) VALUES(?, ?)
                                     """, table_partitions)
+        self.connection.commit()
+        cursor.close()
+
+    def insert_table_columns(self, table_columns: List[Tuple[int, str, str]]):
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.executemany("""
+                                        INSERT OR IGNORE INTO TABLE_COLUMNS(TABLE_ID, COLUMN_NAME, COLUMN_TYPE) 
+                                        VALUES(?, ?, ?);
+                                        """, table_columns)
         self.connection.commit()
         cursor.close()
 

@@ -454,7 +454,7 @@ def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]
     return table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions
 
 
-def parse_workflows_coroutine(working_dir: str) -> Dict:
+def parse_workflows_coroutine(working_dir: str, table_id_name_pairs: List[Tuple[int, str]]) -> Dict:
     paths: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
     all_tables: Dict[str, Dict] = {}
     f_t_g = find_tables_generator(paths)

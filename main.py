@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys
-from typing import List
+from typing import List, Tuple, Dict
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
@@ -13,13 +13,14 @@ from parsing_tool import parse_workflows_coroutine
 
 
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
-    def select_directory(self) -> None:
-        self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select Directory'))
+    def select_workflows_directory(self) -> None:
+        self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select workflows directory'))
         if self.directory_path:
             try:
                 self.loading_progress.setValue(0)
                 self.stackedWidget.setCurrentIndex(1)
-                gen = parse_workflows_coroutine(self.directory_path)
+                table_id_name_pairs: List[Tuple[int, str]] = self.store.get_tables(id_name_pairs=True)
+                gen = parse_workflows_coroutine(self.directory_path, table_id_name_pairs)
                 while True:
                     progress: int = next(gen)
                     self.loading_progress.setValue(progress)
@@ -39,10 +40,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.stackedWidget.setCurrentIndex(0)
             self.wf_filter_workflows('')
 
-    def update_from_dump_coroutine(self, tables_list: List[str]) -> bool:
+    def insert_tables_from_schema_coroutine(self, tables_list: List[str]) -> bool:
         progress: int = 0
         length: int = len(tables_list)
-        self.store.delete_tables(tables_list)
+        self.store.delete_tables()
         for table_name in tables_list:
             without_schema: str = table_name.split('.')[1]
             tables: List[Table] = self.store.get_tables_by_names([table_name, without_schema])
@@ -54,27 +55,68 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.store.insert_new_table(table_name)
             progress += 1
             yield int((progress / length * 100) + 1)
-        self.store.delete_tables(tables_list)
         return True
 
-    def extract_schema(self) -> None:
-        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select schema file')[0])
+    def update_tables_columns_from_schema_coroutine(self, tables_dict: Dict[str, List[Tuple[str, str]]]) -> bool:
+        progress: int = 0
+        length: int = len(list(tables_dict.keys()))
+        tables: List[Table] = self.store.get_tables_by_names(list(tables_dict.keys()))
+        for table in tables:
+            if table.name in tables_dict:
+                self.store.insert_table_columns([(table.index, t[0], t[1]) for t in tables_dict[table.name]])
+                del tables_dict[table.name]
+                progress += 1
+                yield int((progress / length * 100) + 1)
+        for table_name in tables_dict:
+            table: Table = self.store.insert_new_table(table_name)
+            self.store.insert_table_columns([(table.index, t[0], t[1]) for t in tables_dict[table.name]])
+            progress += 1
+            yield int((progress / length * 100) + 1)
+        return True
+
+    def extract_hive_schema(self) -> None:
+        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select hive schema file')[0])
         if schema_filepath:
             tables_list: List[str] = []
             with open(schema_filepath, 'r') as file:
-                schema: str = ''
                 for line in file.readlines():
-                    if 'schema' in line:
-                        schema: str = line.split(':')[1].strip() + '.'
-                    elif '+' in line or 'tab_name' in line:
+                    if 'schema_name,table_name' in line:
                         continue
                     else:
-                        table_name: str = line.split('|')[1].strip()
-                        tables_list.append(schema + table_name)
+                        table_name: str = line.replace(' ', '').replace(',', '.').strip()
+                        tables_list.append(table_name)
             try:
                 self.loading_progress.setValue(0)
                 self.stackedWidget.setCurrentIndex(1)
-                gen = self.update_from_dump_coroutine(tables_list)
+                gen = self.insert_tables_from_schema_coroutine(tables_list)
+                while True:
+                    progress: int = next(gen)
+                    self.loading_progress.setValue(progress)
+            except StopIteration as ret:
+                pass
+            finally:
+                self.stackedWidget.setCurrentIndex(0)
+            self.db_filter_tables()
+
+    def extract_impala_schema(self) -> None:
+        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select impala schema file')[0])
+        if schema_filepath:
+            tables_dict: Dict[str, List[Tuple[str, str]]] = {}
+            with open(schema_filepath, 'r') as file:
+                for line in file.readlines():
+                    if 'schema_name,table_name,field_name,field_type' in line:
+                        continue
+                    else:
+                        table: List[str] = line.split(',')
+                        table_name: str = table[0].strip() + '.' + table[1].strip()
+                        if table_name not in tables_dict:
+                            tables_dict[table_name] = [(table[2].strip(), table[3].strip().strip('"'))]
+                        else:
+                            tables_dict[table_name].append((table[2].strip(), table[3].strip().strip('"')))
+            try:
+                self.loading_progress.setValue(0)
+                self.stackedWidget.setCurrentIndex(1)
+                gen = self.update_tables_columns_from_schema_coroutine(tables_dict)
                 while True:
                     progress: int = next(gen)
                     self.loading_progress.setValue(progress)
@@ -148,6 +190,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_updated_in_list_model.clear()
             self.db_workflow_list_model.clear()
             self.db_partitions_list_model.clear()
+            self.db_columns_list_model.clear()
             for s in self.current_table.based_on_tables:
                 item = QStandardItem(s)
                 item.setEditable(False)
@@ -168,6 +211,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_partitions_list_model.appendRow(item)
+            for s in self.current_table.columns:
+                item = QStandardItem(s)
+                item.setEditable(False)
+                self.db_columns_list_model.appendRow(item)
 
     def save_db_fields(self) -> None:
         if self.current_table:
@@ -244,7 +291,27 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 except ValueError:
                     pass
             self.db_filter_tables()
+
         return func
+
+    def set_menu_state(self):
+        status: str = self.store.get_db_status()
+        if status == 'db_empty':
+            self.action_extract_hive.setEnabled(True)
+            self.action_exctract_impala.setEnabled(False)
+            self.action_open_workflows.setEnabled(False)
+        elif status == 'hive_extracted':
+            self.action_extract_hive.setEnabled(False)
+            self.action_exctract_impala.setEnabled(True)
+            self.action_open_workflows.setEnabled(False)
+        elif status == 'impala_extracted':
+            self.action_extract_hive.setEnabled(False)
+            self.action_exctract_impala.setEnabled(False)
+            self.action_open_workflows.setEnabled(True)
+        else:
+            self.action_extract_hive.setEnabled(False)
+            self.action_exctract_impala.setEnabled(False)
+            self.action_open_workflows.setEnabled(False)
 
     def __init__(self):
         super().__init__()
@@ -254,7 +321,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.unplugged: bool = False
         self.color_filter: List[Color] = []
         self.setupUi(self)
-
+        self.set_menu_state()
         self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
         self.wf_workflow_list.setModel(self.wf_workflow_list_model)
         self.wf_workflow_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -267,8 +334,9 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_descendants_list_model = QStandardItemModel(self.wf_descendants_list)
         self.wf_descendants_list.setModel(self.wf_descendants_list_model)
 
-        self.action_open_workflows.triggered.connect(self.select_directory)
-        self.action_extract_hive.triggered.connect(self.extract_schema)
+        self.action_open_workflows.triggered.connect(self.select_workflows_directory)
+        self.action_extract_hive.triggered.connect(self.extract_hive_schema)
+        self.action_exctract_impala.triggered.connect(self.extract_impala_schema)
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
         self.wf_filter_workflows('')
@@ -285,6 +353,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_workflow_list.setModel(self.db_workflow_list_model)
         self.db_partitions_list_model = QStandardItemModel(self.db_partitions_list)
         self.db_partitions_list.setModel(self.db_partitions_list_model)
+        self.db_columns_list_model = QStandardItemModel(self.db_columns_list)
+        self.db_columns_list.setModel(self.db_columns_list_model)
 
         self.db_table_search.textChanged.connect(self.db_filter_tables)
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
