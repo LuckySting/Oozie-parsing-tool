@@ -7,6 +7,8 @@ import sqlparse
 from typing import List, Dict, Generator, Any, Set, Union, Tuple
 from xml.etree.ElementTree import ElementTree, Element
 
+from store import Store
+
 
 def index_generator(start: int) -> int:
     i = start
@@ -44,21 +46,25 @@ def replace_global(string: str, resolver: Generator) -> str:
     return string
 
 
-def parse_sqoop(el: Element) -> (str, str):
-    next_is_target: bool = False
-    target = ''
-    for arg in el:
-        if 'arg' not in arg.tag:
-            continue
-        if next_is_target and not target:
-            target = arg.text
-            continue
-        if arg.text == '--hive-table':
-            next_is_target = True
-            continue
-        if target:
+def parse_sqoop(el: Element) -> str:
+    """
+    Parse sqoop action xml element, extract table from it
+    :param el: sqoop action xml element
+    :return: sqoop table name
+    """
+    db_arg_i: int = None
+    table_arg_i: int = None
+    for arg_i in range(len(list(el))):
+        if el[arg_i].text == '--hive-database':
+            db_arg_i = arg_i + 1
+        if el[arg_i].text == '--hive-table':
+            table_arg_i = arg_i + 1
+        if db_arg_i and table_arg_i:
             break
-    return target
+    if db_arg_i:
+        return f'{el[db_arg_i].text}.{el[table_arg_i].text}'
+    else:
+        return el[table_arg_i].text
 
 
 def get_hive_script(path_to_workflow: str, el: Element) -> str:
@@ -75,421 +81,164 @@ def get_hive_script(path_to_workflow: str, el: Element) -> str:
     return script_text
 
 
-def is_sub_select(parsed: sqlparse.sql.Statement):
-    if not parsed.is_group:
-        return False
-    return 'SELECT' in parsed.value.upper()
+def extract_tables(statement: str, table_names: Set[str]) -> List[str]:
+    """
+    Extracts table names used in hql statement
+    :param statement: hql statement
+    :param table_names: set of known table names
+    :return: set of used table names
+    """
+    return [t_n for t_n in table_names if f' {t_n} ' or f' {t_n.split(".")[1]} ' in statement]
 
 
-def extract_from_select(parsed: sqlparse.sql.Statement):
-    from_seen = False
-    for item in parsed.tokens:
-        if item.is_group:
-            for x in extract_from_select(item):
-                yield x
-        if from_seen:
-            if is_sub_select(item):
-                for x in extract_from_select(item):
-                    yield x
-            elif item.ttype is sqlparse.tokens.Keyword and item.value.upper() in {'ORDER', 'GROUP', 'BY', 'HAVING',
-                                                                                  'GROUP BY'}:
-                from_seen = False
-            else:
-                if (item.ttype is sqlparse.tokens.Name or isinstance(item, sqlparse.sql.Identifier)) \
-                        and not is_reserved(item):
-                    yield item
-        if item.ttype is sqlparse.tokens.Keyword and item.value.upper() == 'FROM':
-            from_seen = True
-
-
-def is_reserved(token: Any):
-    keywords: Set[str] = {'ADD', 'ADMIN', 'AFTER', 'ANALYZE', 'ARCHIVE', 'ASC', 'BEFORE', 'BUCKET', 'BUCKETS',
-                          'CASCADE', 'CHANGE', 'CLUSTER', 'CLUSTERED', 'CLUSTERSTATUS', 'COLLECTION', 'COLUMNS',
-                          'COMMENT', 'COMPACT', 'COMPACTIONS', 'COMPUTE', 'CONCATENATE', 'CONTINUE', 'DATA',
-                          'DATABASES', 'DATETIME', 'DAY', 'DBPROPERTIES', 'DEFERRED', 'DEFINED', 'DELIMITED',
-                          'DEPENDENCY', 'DESC', 'DIRECTORIES', 'DIRECTORY', 'DISABLE', 'DISTRIBUTE', 'ELEM_TYPE',
-                          'ENABLE', 'ESCAPED', 'EXCLUSIVE', 'EXPLAIN', 'EXPORT', 'FIELDS', 'FILE', 'FILEFORMAT',
-                          'FIRST', 'FORMAT', 'FORMATTED', 'FUNCTIONS', 'HOLD_DDLTIME', 'HOUR', 'IDXPROPERTIES',
-                          'IGNORE', 'INDEX', 'INDEXES', 'INPATH', 'INPUTDRIVER', 'INPUTFORMAT', 'ITEMS', 'JAR', 'KEYS',
-                          'KEY_TYPE', 'LIMIT', 'LINES', 'LOAD', 'LOCATION', 'LOCK', 'LOCKS', 'LOGICAL', 'LONG',
-                          'MAPJOIN', 'MATERIALIZED', 'METADATA', 'MINUS', 'MINUTE', 'MONTH', 'MSCK', 'NOSCAN',
-                          'NO_DROP', 'OFFLINE', 'OPTION', 'OUTPUTDRIVER', 'OUTPUTFORMAT', 'OVERWRITE', 'OWNER',
-                          'PARTITIONED', 'PARTITIONS', 'PLUS', 'PRETTY', 'PRINCIPALS', 'PROTECTION', 'PURGE', 'READ',
-                          'READONLY', 'REBUILD', 'RECORDREADER', 'RECORDWRITER', 'REGEXP', 'RELOAD', 'RENAME',
-                          'REPAIR', 'REPLACE', 'REPLICATION', 'RESTRICT', 'REWRITE', 'RLIKE', 'ROLE', 'ROLES',
-                          'SCHEMA', 'SCHEMAS', 'SECOND', 'SEMI', 'SERDE', 'SERDEPROPERTIES', 'SERVER', 'SETS',
-                          'SHARED', 'SHOW', 'SHOW_DATABASE', 'SKEWED', 'SORT', 'SORTED', 'SSL', 'STATISTICS', 'STORED',
-                          'STREAMTABLE', 'STRING', 'STRUCT', 'TABLES', 'TBLPROPERTIES', 'TEMPORARY', 'TERMINATED',
-                          'TINYINT', 'TOUCH', 'TRANSACTIONS', 'UNARCHIVE', 'UNDO', 'UNIONTYPE', 'UNLOCK', 'UNSET',
-                          'UNSIGNED', 'URI', 'USE', 'UTC', 'UTCTIMESTAMP', 'VALUE_TYPE', 'VIEW', 'WHILE', 'YEAR'}
-    if isinstance(token, str):
-        return token.upper() in keywords
-    return token.value.upper() in keywords
-
-
-def extract_from_create(parsed: sqlparse.sql.Statement):
-    i = 0
-    for item in parsed.tokens:
-        if isinstance(item, sqlparse.sql.Identifier):
-            if not is_reserved(item):
-                yield item
-            i += 1
-            continue
-        if item.is_group:
-            if isinstance(item, sqlparse.sql.Parenthesis):
-                if 'SELECT' not in item.normalized.upper():
-                    continue
-            for x in extract_from_create(item):
-                yield x
-        if item.normalized.upper() == 'SELECT':
-            select_tokens = parsed.tokens[i:]
-            select_statement = sqlparse.sql.Statement(tokens=select_tokens)
-            for x in extract_from_select(select_statement):
-                yield x
-            break
-        i += 1
-
-
-def extract_from_external_create(parsed: sqlparse.sql.Statement) -> List[str]:
-    return [parsed.value.replace('  ', ' ').split(' (')[0].split(' ')[-1]]
-
-
-def magic_filter(identifies: List[str]) -> List[str]:
-    filtered: List[str] = []
-    for idf in identifies:
-        bad = False
-        for word in idf.lower().replace('stored as parquet', ' ').split(' '):
-            if is_reserved(word):
-                bad = True
-                break
-        if not bad:
-            filtered.append(idf)
-    return filtered
-
-
-def replace_with(identifies: List[sqlparse.sql.Identifier]) -> List[str]:
-    tables: List[str] = []
-    for idf in identifies:
-        match = re.match(r'^.+\s\(', idf.value)
-        if match:
-            tables.append(match.group(0).replace(' (', ''))
-            continue
-        match = re.match(r'^\(.+\)', idf.value)
-        if match:
-            tables.append(match.group(0).replace('(', '').replace(')', ''))
-            continue
-        if ' AS ' in idf.value.upper() and '(' in idf.value:
-
-            alias: str = idf.value.lower().split('as')[0].strip()
-            sub_tables: List[sqlparse.sql.Token] = list(extract_from_select(idf))
-            for sub_table in sub_tables:
-                table_name: str = sub_table.value.split(' ')[0]
-                tables.append(f'{table_name} {alias}')
-        else:
-            tables.append(idf.value)
-    return list(dict.fromkeys(tables))
-
-
-def replace_alias(identifies: List[str]) -> List[str]:
-    identifies = [i.lower().replace('stored as parquet', ' ').replace(' as ', ' ') for i in identifies]
-    alias_table: Dict[str, str] = {i.split(' ')[-1]: i.split(' ')[0] for i in identifies}
-    tables: List[str] = []
-    for alias in alias_table:
-        current_alias: str = alias
-        while current_alias in alias_table:
-            if current_alias == alias_table[current_alias]:
-                break
-            current_alias = alias_table[current_alias]
-        if current_alias not in tables:
-            tables.append(current_alias)
-    return tables
-
-
-def parse_hql_create(statement: sqlparse.sql.Statement, workflow_name: str) -> List[Dict[str, Any]]:
-    output: List[Dict[str, Any]] = []
-    if 'EXTERNAL' in statement.value.upper():
-        table_names = extract_from_external_create(statement)
-    else:
-        identifies = list(dict.fromkeys(extract_from_create(statement)))
-        table_names = replace_alias(magic_filter(replace_with(identifies)))
-    table = {
-        'index': None,
-        'name': table_names[0],
-        'sqooped': False,
-        'created_in_workflows': {workflow_name},
-        'used_in_workflows': set(),
-        'based_on_tables': set(),
-        'used_by_tables': set(),
-        'updated_in_workflows': set(),
-        'partitions': set()
-    }
+def extract_partitions(statement) -> Set[str]:
+    """
+    Extract table partitions from hql create statement
+    :param statement: hql create statement
+    :return: set of column names partitioned by
+    """
     partitions = re.search(r'partitioned by \([\s\w]+\)', statement.normalized, re.IGNORECASE)
     if partitions:
         word_list = partitions.group(0).lower().replace('partitioned by (', '').replace(')', '').split(' ')
-        partitions = {word_list[i] for i in range(len(word_list)) if i % 2 == 0}
-        table['partitions'].update(partitions)
-    for table_name in table_names[1:]:
-        table['based_on_tables'].add(table_name)
-        output.append({
-            'index': None,
-            'name': table_name,
-            'sqooped': False,
-            'created_in_workflows': set(),
-            'used_in_workflows': {workflow_name},
-            'based_on_tables': set(),
-            'used_by_tables': {table['name']},
-            'updated_in_workflows': set(),
-            'partitions': set()
-        })
-    output.append(table)
-    return output
+        return {word_list[i] for i in range(len(word_list)) if i % 2 == 0}
+    return set()
 
 
-def extract_from_insert(parsed: sqlparse.sql.Statement):
-    i = 0
-    for item in parsed.tokens:
-        if isinstance(item, sqlparse.sql.Identifier):
-            yield item
-            i += 1
-            continue
-        if item.is_group and not isinstance(item, sqlparse.sql.Parenthesis):
-            for x in extract_from_insert(item):
-                yield x
-        if item.value.upper() == 'SELECT':
-            select_tokens = parsed.tokens[i:]
-            select_statement = sqlparse.sql.Statement(tokens=select_tokens)
-            for x in extract_from_select(select_statement):
-                yield x
-            break
-        i += 1
-
-
-def parse_hql_insert(statement: sqlparse.sql.Statement, workflow_name: str) -> List[Dict[str, Any]]:
-    identifies: List[sqlparse.tokens.Token] = list(extract_from_insert(statement))
-    table_names: List[str] = replace_alias(magic_filter(replace_with(identifies)))
-    output: List[Dict[str, Any]] = []
-    table = {
-        'index': None,
-        'name': table_names[0],
-        'sqooped': False,
-        'created_in_workflows': set(),
-        'used_in_workflows': {workflow_name},
-        'based_on_tables': set(),
-        'used_by_tables': set(),
-        'updated_in_workflows': {workflow_name},
-        'partitions': set()
-    }
-    for table_name in table_names[1:]:
-        table['based_on_tables'].add(table_name)
-        output.append({
-            'index': None,
-            'name': table_name,
-            'sqooped': False,
-            'created_in_workflows': set(),
-            'used_in_workflows': {workflow_name},
-            'based_on_tables': set(),
-            'used_by_tables': {table['name']},
-            'updated_in_workflows': set(),
-            'partitions': set()
-        })
-    output.append(table)
-    return output
-
-
-def parse_hql(script_text: str, workflow_name: str) -> List[Dict[str, Any]]:
+def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str, int]):
+    """
+    Parses hql query and extracts relations between tables and workflows
+    :param script_text: text of hql query
+    :param workflow_id: workflow id
+    :param tables_name_id_dict: {table_name: table_id} dict
+    :return: table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
+    """
     if script_text == '':
-        return {}
-    formatted_script: List[str] = []
-    for line in script_text.split('\n'):
-        if '--' not in line:
-            formatted_script.append(line)
-    script_text = ' '.join(formatted_script)
-    tables: List[Dict[str, Any]] = []
+        return set(), set(), set(), set(), set()
+    all_table_names = set(tables_name_id_dict.keys())
+    table_based_on: Set[Tuple[int, int]] = set()
+    table_created_in: Set[Tuple[int, int]] = set()
+    table_partitions: Set[Tuple[int, str]] = set()
+    table_updated_in: Set[Tuple[int, int]] = set()
+    table_used_in: Set[Tuple[int, int]] = set()
     for statement in sqlparse.parse(script_text):
         command = statement.token_first(True, True)
         if not command:
             continue
         if command.normalized == 'CREATE':
-            tables += parse_hql_create(statement, workflow_name)
+            partitions: Set[str] = extract_partitions(statement)
+            table_names: List[str] = list(reversed(extract_tables(statement.normalized, all_table_names)))
+            if len(table_names) == 0:
+                continue
+            created_table_id = tables_name_id_dict[table_names.pop()]
+            base_tables_ids = [tables_name_id_dict[t_n] for t_n in table_names]
+            table_based_on.update(((created_table_id, b_t_i) for b_t_i in base_tables_ids))
+            table_created_in.update(((created_table_id, workflow_id),))
+            table_partitions.update(((created_table_id, p_n) for p_n in partitions))
+            table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
         elif command.normalized == 'INSERT':
-            tables += parse_hql_insert(statement, workflow_name)
-    return tables
+            table_names: List[str] = list(reversed(extract_tables(statement.normalized, all_table_names)))
+            if len(table_names) == 0:
+                continue
+            inserted_table_id = tables_name_id_dict[table_names.pop()]
+            base_tables_ids = [tables_name_id_dict[t_n] for t_n in table_names]
+            table_based_on.update(((inserted_table_id, b_t_i) for b_t_i in base_tables_ids))
+            table_updated_in.update(((inserted_table_id, workflow_id),))
+            table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
+        else:
+            a = 1
+    return table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
 
 
-def parse_workflow(path_to_workflow_xml: str) -> Dict[str, Dict]:
+def parse_workflow(path_to_workflow_xml: str, workflow_id: int, table_id_name_pairs: List[Tuple[int, str]]):
+    """
+    Parse workflow and extracts tables and relations between them in workflow
+    :param path_to_workflow_xml: path to workflow.xml
+    :param workflow_id: id of that workflow
+    :param table_id_name_pairs: list of (table_id, table_name) pairs
+    :return: sqooped_tables, workflows, table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
+    """
     with open(path_to_workflow_xml, 'r') as workflow_xml:
         root = ElementTree(file=workflow_xml).getroot()
     path_to_workflow = os.path.sep.join(path_to_workflow_xml.split(os.path.sep)[:-1])
     workflow_name = path_to_workflow.split(os.path.sep)[-1]
     r_g = resolve_global(path_to_workflow)
     next(r_g)
-    tables: Dict[str, Dict[str, Any]] = {}
+    tables_id_name_dict: Dict[int, str] = {t[0]: t[1] for t in table_id_name_pairs}
+    tables_name_id_dict: Dict[str, int] = {t[1]: t[0] for t in table_id_name_pairs}
+    index_g = index_generator(max(tables_id_name_dict.keys()) + 1)
+    sqooped_tables: Set[Tuple[int, str, bool]] = set()
+    workflows: Set[Tuple[int, str]] = {(workflow_id, workflow_name)}
+    table_based_on: Set[Tuple[int, int]] = set()
+    table_created_in: Set[Tuple[int, int]] = set()
+    table_partitions: Set[Tuple[int, str]] = set()
+    table_updated_in: Set[Tuple[int, int]] = set()
+    table_used_in: Set[Tuple[int, int]] = set()
+    for el in root:
+        if 'action' in el.tag:
+            for el_ in el:
+                if 'sqoop' in el_.tag:
+                    table_name: str = parse_sqoop(el_)
+                    table_name: str = replace_global(table_name, r_g)
+                    table_id: int = tables_name_id_dict.get(table_name, None)
+                    new: bool = False
+                    if table_id is None:
+                        table_id = next(index_g)
+                        tables_id_name_dict.update({table_id: table_name})
+                        tables_name_id_dict.update({table_name: table_id})
+                        new = True
+                    sqooped_tables.update(((table_id, table_name, new),))
+                    table_used_in.update(((table_id, workflow_id),))
     for el in root:
         if 'action' in el.tag:
             for el_ in el:
                 if 'hive' in el_.tag:
                     script_text = replace_global(get_hive_script(path_to_workflow, el_), r_g)
-                    tables_: List[Dict[str, Any]] = parse_hql(script_text, workflow_name)
-                    for table in tables_:
-                        if table['name'] not in tables:
-                            tables[table['name']] = table
-                        else:
-                            tables[table['name']]['created_in_workflows'].update(table['created_in_workflows'])
-                            tables[table['name']]['used_in_workflows'].update(table['used_in_workflows'])
-                            tables[table['name']]['updated_in_workflows'].update(table['updated_in_workflows'])
-                            tables[table['name']]['based_on_tables'].update(table['based_on_tables'])
-                            tables[table['name']]['used_by_tables'].update(table['used_by_tables'])
-                            tables[table['name']]['partitions'].update(table['partitions'])
-                elif 'sqoop' in el_.tag:
-                    table_name: str = parse_sqoop(el_)
-                    table_name: str = replace_global(table_name, r_g)
-                    if table_name not in tables:
-                        tables[table_name] = {
-                            'index': None,
-                            'name': table_name,
-                            'sqooped': True,
-                            'created_in_workflows': {workflow_name},
-                            'used_in_workflows': set(),
-                            'updated_in_workflows': set(),
-                            'based_on_tables': set(),
-                            'used_by_tables': set(),
-                            'partitions': set()
-                        }
-                    else:
-                        tables[table_name]['sqooped'] = True
-    return tables
+                    _table_based_on, _table_created_in, _table_partitions, _table_updated_in, _table_used_in = parse_hql(
+                        script_text, workflow_id, tables_name_id_dict)
+                    table_based_on.update(_table_based_on)
+                    table_created_in.update(_table_created_in)
+                    table_partitions.update(_table_partitions)
+                    table_updated_in.update(_table_updated_in)
+                    table_used_in.update(_table_used_in)
+
+    return sqooped_tables, workflows, table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
 
 
-def find_tables_generator(paths_to_workflows: List[str]) -> (Dict[str, Dict], int):
-    index_g = index_generator(1)
+def parse_workflows_coroutine(working_dir: str, table_id_name_pairs: List[Tuple[int, str]]) -> Tuple[List[Tuple]]:
+    """
+    Coroutine, witch parses workflows one by one in working_dir, looking for tables in it
+    :param working_dir: dir with workflows directories
+    :param table_id_name_pairs: list of pairs (table_id, table_name) from hive/impala schema
+    :return: sqooped_tables, workflows, table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
+    (yields progress value after each parsed workflow)
+    """
+    paths_to_workflows: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
     progress: int = 0
-    total: int = len(paths_to_workflows)
-    for path in paths_to_workflows:
-        tables = parse_workflow(path)
-        for table_name in tables:
-            tables[table_name]['index'] = next(index_g)
-        yield tables, round(progress / total * 100)
-        progress += 1
-
-
-def parse_workflows(working_dir: str) -> Dict:
-    paths: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
-    all_tables: Dict[str, Dict] = {}
-    for tables, progress in find_tables_generator(paths):
-        for table_name in tables:
-            if table_name not in all_tables:
-                all_tables[table_name] = tables[table_name]
-            else:
-                for key in tables[table_name]:
-                    if isinstance(tables[table_name][key], set):
-                        all_tables[table_name][key].update(tables[table_name][key])
-        print(f'Progress {progress}/100%')
-    return all_tables
-
-
-def link_tables(tables: Dict[str, Dict]) -> Dict[str, Dict]:
-    for table_name in tables:
-        for base_table_name in tables[table_name]['based_on_tables']:
-            if base_table_name in table_name:
-                tables[base_table_name]['used_by_tables'].add(table_name)
-        for used_table_name in tables[table_name]['used_by_tables']:
-            if used_table_name in table_name:
-                tables[used_table_name]['based_on_tables'].add(table_name)
-
-
-def extract_workflows(tables: Dict[str, Dict]) -> Dict[str, Dict]:
-    index_g = index_generator(1)
-    workflows: Dict[str, Dict] = {}
-    for table_name in tables:
-        for workflow_name in tables[table_name]['created_in_workflows']:
-            if workflow_name not in workflows:
-                workflows[workflow_name] = {
-                    'index': next(index_g),
-                    'name': workflow_name,
-                    'source_tables': set(),
-                    'effected_tables': {table_name}
-                }
-            else:
-                workflows[workflow_name]['effected_tables'].add(table_name)
-        for workflow_name in tables[table_name]['used_in_workflows']:
-            if workflow_name not in workflows:
-                workflows[workflow_name] = {
-                    'index': next(index_g),
-                    'name': workflow_name,
-                    'source_tables': {table_name},
-                    'effected_tables': set()
-                }
-            else:
-                workflows[workflow_name]['source_tables'].add(table_name)
-        for workflow_name in tables[table_name]['updated_in_workflows']:
-            if workflow_name not in workflows:
-                workflows[workflow_name] = {
-                    'index': next(index_g),
-                    'name': workflow_name,
-                    'source_tables': set(),
-                    'effected_tables': {table_name}
-                }
-            else:
-                workflows[workflow_name]['source_tables'].add(table_name)
-    return workflows
-
-
-def extract_tables_relations(tables: Dict[str, Dict], workflows: Dict[str, Dict]):
-    table_created_in: Set[Tuple[int, int]] = set()
-    table_used_in: Set[Tuple[int, int]] = set()
+    length: int = len(paths_to_workflows)
+    sqooped_tables: Set[Tuple[int, str, bool]] = set()
+    workflows: Set[Tuple[int, str]] = set()
     table_based_on: Set[Tuple[int, int]] = set()
-    table_updated_in: Set[Tuple[int, int]] = set()
+    table_created_in: Set[Tuple[int, int]] = set()
     table_partitions: Set[Tuple[int, str]] = set()
-    for table in tables.values():
-        for workflow_name in table['created_in_workflows']:
-            table_created_in.add((table['index'], workflows[workflow_name]['index']))
-        for workflow_name in table['used_in_workflows']:
-            table_used_in.add((table['index'], workflows[workflow_name]['index']))
-        for workflow_name in table['updated_in_workflows']:
-            table_updated_in.add((table['index'], workflows[workflow_name]['index']))
-        for table_name in table['based_on_tables']:
-            table_based_on.add((table['index'], tables[table_name]['index']))
-        for table_name in table['partitions']:
-            table_partitions.add((table['index'], table_name))
-    return table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions
-
-
-def parse_workflows_coroutine(working_dir: str, table_id_name_pairs: List[Tuple[int, str]]) -> Dict:
-    paths: List[str] = glob.glob(f'{working_dir}/**/workflow.xml')
-    all_tables: Dict[str, Dict] = {}
-    f_t_g = find_tables_generator(paths)
-    for tables, progress in f_t_g:
-        all_tables.update(tables)
-        yield progress
-    link_tables(all_tables)
-    for table_name in all_tables:
-        for key in all_tables[table_name]:
-            if isinstance(all_tables[table_name][key], set):
-                all_tables[table_name][key] = list(all_tables[table_name][key])
-    all_workflows = extract_workflows(all_tables)
-    for workflow_name in all_workflows:
-        for key in all_workflows[workflow_name]:
-            if isinstance(all_workflows[workflow_name][key], set):
-                all_workflows[workflow_name][key] = list(all_workflows[workflow_name][key])
-    table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions = extract_tables_relations(all_tables, all_workflows)
-    return all_tables, all_workflows, table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions
+    table_updated_in: Set[Tuple[int, int]] = set()
+    table_used_in: Set[Tuple[int, int]] = set()
+    index_g = index_generator(1)
+    for path in paths_to_workflows:
+        _sqooped_tables, _workflows, _table_based_on, _table_created_in, _table_partitions, _table_updated_in, _table_used_in = parse_workflow(
+            path, next(index_g), table_id_name_pairs)
+        sqooped_tables.update(_sqooped_tables)
+        workflows.update(_workflows)
+        table_based_on.update(_table_based_on)
+        table_created_in.update(_table_created_in)
+        table_partitions.update(_table_partitions)
+        table_updated_in.update(_table_updated_in)
+        table_used_in.update(_table_used_in)
+        yield round(progress / length * 100)
+        progress += 1
+    return sqooped_tables, workflows, table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
 
 
 if __name__ == '__main__':
-    t = time()
-    tables: Dict = {}
-    workflows: Dict = {}
-    try:
-        gen = parse_workflows_coroutine('/home/shared/PycharmProjects/parsing_tool/workflow_small')
-        while True:
-            progress: int = next(gen)
-            print(f'Progress {progress}/100%')
-    except StopIteration as ret:
-        tables, workflows = ret.value
-    print(time() - t)
-
-    with open('result.json', 'w') as file:
-        json.dump({
-            'workflows': workflows,
-            'tables': tables
-        }, file)
+    store = Store('db.sqlite3')
+    for a in parse_workflows_coroutine('./workflow_small', store.get_tables(id_name_pairs=True)):
+        print(a)

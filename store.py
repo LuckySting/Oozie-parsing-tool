@@ -359,6 +359,19 @@ class Store:
         self.connection.commit()
         cursor.close()
 
+    def insert_sqooped_tables(self, tables: Set[Tuple[int, str, bool]]):
+        insert_tables: List[Tuple[int, str]] = [(t[0], t[1]) for t in tables if t[2]]
+        update_tables: List[Tuple[int, str]] = [(t[0], t[1]) for t in tables if not t[2]]
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.executemany("""
+                            INSERT OR IGNORE INTO TABLES(ID, NAME, MEANING, AUTHORS, SQOOPED) VALUES(?, ?, ?, ?, ?)
+                           """, [(t[0], t[1], '', '', True) for t in insert_tables])
+        cursor.executemany("""
+                                    UPDATE TABLES SET SQOOPED = 1 WHERE ID = ?
+                                   """, [(t[0],) for t in update_tables])
+        self.connection.commit()
+        cursor.close()
+
     def insert_workflows(self, workflows: List[Workflow]):
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.executemany("""

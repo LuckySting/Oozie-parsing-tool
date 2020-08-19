@@ -14,7 +14,9 @@ from parsing_tool import parse_workflows_coroutine
 
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def select_workflows_directory(self) -> None:
-        self.directory_path = str(QFileDialog.getExistingDirectory(self, 'Select workflows directory'))
+        dialog: QFileDialog = QFileDialog(self, caption='Select workflows directory')
+        self.directory_path = str(dialog.getExistingDirectory())
+        dialog.close()
         if self.directory_path:
             try:
                 self.loading_progress.setValue(0)
@@ -25,11 +27,9 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                     progress: int = next(gen)
                     self.loading_progress.setValue(progress)
             except StopIteration as ret:
-                tables, workflows, table_created_in, table_used_in, table_based_on, table_updated_in, table_partitions = ret.value
-                tables = [Table.from_dict(tables[t_n]) for t_n in tables]
-                workflows = [Workflow.from_dict(workflows[w_n]) for w_n in workflows]
-                self.store.create_db_tables(force=True)
-                self.store.insert_tables(tables)
+                sqooped_tables, workflows, table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in = ret.value
+                workflows = [Workflow(*w_n) for w_n in workflows]
+                self.store.insert_sqooped_tables(sqooped_tables)
                 self.store.insert_workflows(workflows)
                 self.store.insert_table_based_on(table_based_on)
                 self.store.insert_table_created_in(table_created_in)
@@ -39,6 +39,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             finally:
                 self.stackedWidget.setCurrentIndex(0)
             self.wf_filter_workflows('')
+            self.set_menu_state()
 
     def insert_tables_from_schema_coroutine(self, tables_list: List[str]) -> bool:
         progress: int = 0
@@ -75,7 +76,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         return True
 
     def extract_hive_schema(self) -> None:
-        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select hive schema file')[0])
+        dialog: QFileDialog = QFileDialog(self, caption='Select hive schema file')
+        schema_filepath: str = str(dialog.getOpenFileName()[0])
         if schema_filepath:
             tables_list: List[str] = []
             with open(schema_filepath, 'r') as file:
@@ -97,9 +99,11 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             finally:
                 self.stackedWidget.setCurrentIndex(0)
             self.db_filter_tables()
+            self.set_menu_state()
 
     def extract_impala_schema(self) -> None:
-        schema_filepath: str = str(QFileDialog.getOpenFileName(self, 'Select impala schema file')[0])
+        dialog: QFileDialog = QFileDialog(self, caption='Select impala schema file')
+        schema_filepath: str = str(dialog.getOpenFileName()[0])
         if schema_filepath:
             tables_dict: Dict[str, List[Tuple[str, str]]] = {}
             with open(schema_filepath, 'r') as file:
@@ -125,6 +129,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             finally:
                 self.stackedWidget.setCurrentIndex(0)
             self.db_filter_tables()
+            self.set_menu_state()
 
     def wf_filter_workflows(self, search_text: str) -> None:
         self.wf_workflow_list_model.clear()
