@@ -1,9 +1,30 @@
 import sqlite3
+from enum import Enum
 from typing import List, Tuple, Union, Dict, Set
+
+from PyQt5.QtGui import QColor
+
+
+class Color(Enum):
+    RED: str = 'red'
+    BLUE: str = 'blue'
+    YELLOW: str = 'yellow'
+    GREEN: str = 'green'
+    NONE: str = None
+
+    @classmethod
+    def to_q_color(cls, color: 'Color') -> QColor:
+        if color is None:
+            return QColor('black')
+        else:
+            return QColor(color.value)
+
+
 
 
 class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
+                 color: Union[Color, str] = Color.NONE,
                  created_in_workflows=None,
                  used_in_workflows=None,
                  updated_in_workflows=None, based_on_tables=None, partitions=None):
@@ -21,6 +42,7 @@ class Table:
         self.name: str = name
         self.meaning: str = meaning
         self.authors: str = authors
+        self.color: Color = color if not isinstance(color, str) else Color(color)
         self.sqooped: bool = bool(sqooped)
         self.created_in_workflows: List[str] = created_in_workflows
         self.updated_in_workflows: List[str] = updated_in_workflows
@@ -41,8 +63,8 @@ class Table:
 
 
 class Workflow:
-    def __init__(self, index: int, name: str, source_tables=None, effected_tables=None, predecessors=None,
-                 descendants=None):
+    def __init__(self, index: int, name: str, color: Color = Color.NONE,
+                 source_tables=None, effected_tables=None, predecessors=None, descendants=None):
         if source_tables is None:
             source_tables = list()
         if effected_tables is None:
@@ -53,6 +75,7 @@ class Workflow:
             descendants = list()
         self.index: int = index
         self.name: str = name
+        self.color: Color = color
         self.source_tables: List[str] = source_tables
         self.effected_tables: List[str] = effected_tables
         self.predecessors: List[str] = predecessors
@@ -90,14 +113,16 @@ class Store:
                 NAME TEXT NOT NULL UNIQUE,
                 MEANING TEXT NOT NULL DEFAULT '',
                 AUTHORS TEXT NOT NULL DEFAULT '',
-                SQOOPED BOOLEAN NOT NULL DEFAULT FALSE
+                SQOOPED BOOLEAN NOT NULL DEFAULT FALSE,
+                COLOR TEXT DEFAULT NULL
             );
         """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS WORKFLOWS
             (
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                NAME TEXT NOT NULL UNIQUE
+                NAME TEXT NOT NULL UNIQUE,
+                COLOR TEXT DEFAULT NULL
             );
         """)
         cursor.execute("""
@@ -144,16 +169,20 @@ class Store:
 
     def update_table(self, table: Table) -> None:
         cursor: sqlite3.Cursor = self.connection.cursor()
-        cursor.execute('UPDATE TABLES SET MEANING=?, AUTHORS=? WHERE ID = ?',
-                       (table.meaning, table.authors, table.index))
+        cursor.execute('UPDATE TABLES SET MEANING=?, AUTHORS=?, COLOR=? WHERE ID = ?',
+                       (table.meaning, table.authors, table.color.value, table.index))
         self.connection.commit()
         cursor.close()
 
-    def get_tables(self, search_text: str = '', only_names: bool = False) -> List[Union[str, Table]]:
+    def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False) -> List[Union[str, Table]]:
+        if color_filter is None:
+            color_filter = []
+        sql: str = 'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED, COLOR FROM TABLES WHERE instr(NAME, ?) > 0'
+        if len(color_filter) > 0:
+            where_color: str = ' AND COLOR IN (' + ', '.join([f'\'{c.value}\'' for c in color_filter]) + ')'
+            sql += where_color
         cursor: sqlite3.Cursor = self.connection.cursor()
-        tables: List[Tuple] = cursor.execute(
-            'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED FROM TABLES WHERE instr(NAME, ?) > 0;',
-            (search_text,)).fetchall()
+        tables: List[Tuple] = cursor.execute(sql, (search_text,)).fetchall()
         cursor.close()
         if only_names:
             return [d[1] for d in tables]
@@ -170,7 +199,7 @@ class Store:
 
     def get_workflows_by_names(self, workflow_names: List[str]) -> List[Workflow]:
         cursor: sqlite3.Cursor = self.connection.cursor()
-        sql: str = 'SELECT ID, NAME FROM WORKFLOWS WHERE 1=0'
+        sql: str = 'SELECT ID, NAME, COLOR FROM WORKFLOWS WHERE 1=0'
         for name in workflow_names:
             sql += f' OR NAME = "{name}"'
         workflows: List[Tuple] = cursor.execute(sql).fetchall()
@@ -180,7 +209,7 @@ class Store:
     def get_workflows(self, search_text: str = '', only_names: bool = False) -> List[Union[str, Workflow]]:
         cursor: sqlite3.Cursor = self.connection.cursor()
         workflows: List[Tuple] = cursor.execute(
-            'SELECT ID, NAME FROM WORKFLOWS WHERE instr(NAME, ?) > 0;', (search_text,)).fetchall()
+            'SELECT ID, NAME, COLOR FROM WORKFLOWS WHERE instr(NAME, ?) > 0;', (search_text,)).fetchall()
         cursor.close()
         if only_names:
             return [d[1] for d in workflows]
@@ -244,7 +273,8 @@ class Store:
                 AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.effected_tables])[:-2]});
             """
             workflow.predecessors = [t[0] for t in cursor.execute(predecessors_sql).fetchall() if t[0] != workflow.name]
-            workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if t[0] != workflow.name and t[0] not in workflow.predecessors]
+            workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if
+                                    t[0] != workflow.name and t[0] not in workflow.predecessors]
         cursor.close()
 
     def populate_table_data(self, table: Table) -> Table:

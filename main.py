@@ -4,11 +4,11 @@ from typing import List
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
 from PyQt5.QtWidgets import QFileDialog, QAbstractItemView
 
 import design
-from store import Store, Table, Workflow
+from store import Store, Table, Workflow, Color
 from parsing_tool import parse_workflows_coroutine
 
 
@@ -82,7 +82,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 pass
             finally:
                 self.stackedWidget.setCurrentIndex(0)
-            self.db_filter_tables('')
+            self.db_filter_tables()
 
     def wf_filter_workflows(self, search_text: str) -> None:
         self.wf_workflow_list_model.clear()
@@ -119,24 +119,30 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 item.setEditable(False)
                 self.wf_descendants_list_model.appendRow(item)
 
-    def db_filter_tables(self, search_text: str) -> None:
+    def db_filter_tables(self) -> None:
+        search_text: str = self.db_table_search.text()
         self.db_table_list_model.clear()
-        for table in self.store.get_tables(search_text):
+        for table in self.store.get_tables(search_text=search_text, color_filter=self.color_filter):
+            color: QColor = QColor(Color.to_q_color(table.color))
+            brush: QBrush = QBrush(color)
             if len(table.updated_in_workflows) or len(table.created_in_workflows) or len(table.used_in_workflows):
-                if not self.independent:
+                if not self.unplugged:
                     item = QStandardItem(table.name)
+                    item.setForeground(brush)
                     item.setEditable(False)
                     self.db_table_list_model.appendRow(item)
             else:
-                if self.independent:
+                if self.unplugged:
                     item = QStandardItem(table.name)
                     item.setEditable(False)
+                    item.setForeground(brush)
                     self.db_table_list_model.appendRow(item)
 
     def fill_db_fields(self) -> None:
         if self.current_table:
             self.db_description_input.setText(self.current_table.meaning)
             self.db_authors_input.setText(self.current_table.authors)
+            self.db_set_color(self.current_table.color)
             self.db_sqooped_list_model.clear()
             self.db_created_at_list_model.clear()
             self.db_updated_in_list_model.clear()
@@ -167,7 +173,52 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if self.current_table:
             self.current_table.meaning = self.db_description_input.toPlainText()
             self.current_table.authors = self.db_authors_input.toPlainText()
+            self.current_table.color = self.db_get_color()
             self.store.update_table(self.current_table)
+
+    def db_set_color(self, color: Color):
+        if color is Color.RED:
+            self.db_red_color_button.setChecked(True)
+            self.db_blue_color_button.setChecked(False)
+            self.db_yellow_color_button.setChecked(False)
+            self.db_green_color_button.setChecked(False)
+            self.db_none_color_button.setChecked(False)
+        elif color is Color.BLUE:
+            self.db_red_color_button.setChecked(False)
+            self.db_blue_color_button.setChecked(True)
+            self.db_yellow_color_button.setChecked(False)
+            self.db_green_color_button.setChecked(False)
+            self.db_none_color_button.setChecked(False)
+        elif color is Color.YELLOW:
+            self.db_red_color_button.setChecked(False)
+            self.db_blue_color_button.setChecked(False)
+            self.db_yellow_color_button.setChecked(True)
+            self.db_green_color_button.setChecked(False)
+            self.db_none_color_button.setChecked(False)
+        elif color is Color.GREEN:
+            self.db_red_color_button.setChecked(False)
+            self.db_blue_color_button.setChecked(False)
+            self.db_yellow_color_button.setChecked(False)
+            self.db_green_color_button.setChecked(True)
+            self.db_none_color_button.setChecked(False)
+        else:
+            self.db_red_color_button.setChecked(False)
+            self.db_blue_color_button.setChecked(False)
+            self.db_yellow_color_button.setChecked(False)
+            self.db_green_color_button.setChecked(False)
+            self.db_none_color_button.setChecked(True)
+
+    def db_get_color(self) -> Color:
+        if self.db_red_color_button.isChecked():
+            return Color.RED
+        elif self.db_blue_color_button.isChecked():
+            return Color.BLUE
+        elif self.db_green_color_button.isChecked():
+            return Color.GREEN
+        elif self.db_yellow_color_button.isChecked():
+            return Color.YELLOW
+        elif self.db_none_color_button.isChecked():
+            return Color.NONE
 
     def db_select_tables(self) -> None:
         table_name: str = self.db_table_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
@@ -180,15 +231,28 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             pass
 
     def db_change_tables_filter(self, v: bool):
-        self.independent = v
-        self.db_filter_tables('')
+        self.unplugged = v
+        self.db_filter_tables()
+
+    def toggle_color_filter(self, color: Color):
+        def func(value):
+            if value:
+                self.color_filter.append(color)
+            else:
+                try:
+                    self.color_filter.remove(color)
+                except ValueError:
+                    pass
+            self.db_filter_tables()
+        return func
 
     def __init__(self):
         super().__init__()
         self.store: Store = Store('db.sqlite3')
         self.directory_path: str = None
         self.current_table: Table = None
-        self.independent: bool = False
+        self.unplugged: bool = False
+        self.color_filter: List[Color] = []
         self.setupUi(self)
 
         self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
@@ -226,7 +290,12 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
         self.db_save_button.clicked.connect(self.save_db_fields)
         self.db_show_only_unplugged.stateChanged.connect(self.db_change_tables_filter)
-        self.db_filter_tables('')
+        self.db_blue_color_filter.stateChanged.connect(self.toggle_color_filter(Color.BLUE))
+        self.db_green_color_filter.stateChanged.connect(self.toggle_color_filter(Color.GREEN))
+        self.db_red_color_filter.stateChanged.connect(self.toggle_color_filter(Color.RED))
+        self.db_yellow_color_filter.stateChanged.connect(self.toggle_color_filter(Color.YELLOW))
+        self.db_none_color_filter.stateChanged.connect(self.toggle_color_filter(Color.NONE))
+        self.db_filter_tables()
 
 
 def main():
