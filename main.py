@@ -15,7 +15,7 @@ from parsing_tool import parse_workflows_coroutine
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def select_workflows_directory(self) -> None:
         dialog: QFileDialog = QFileDialog(self, caption='Select workflows directory')
-        self.directory_path = str(dialog.getExistingDirectory())
+        self.directory_path = str(dialog.getExistingDirectory(dialog, 'Select workflows directory'))
         dialog.close()
         if self.directory_path:
             try:
@@ -77,7 +77,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def extract_hive_schema(self) -> None:
         dialog: QFileDialog = QFileDialog(self, caption='Select hive schema file')
-        schema_filepath: str = str(dialog.getOpenFileName()[0])
+        schema_filepath: str = str(dialog.getOpenFileName(dialog, 'Select hive schema file')[0])
+        dialog.close()
         if schema_filepath:
             tables_list: List[str] = []
             with open(schema_filepath, 'r') as file:
@@ -102,8 +103,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.set_menu_state()
 
     def extract_impala_schema(self) -> None:
-        dialog: QFileDialog = QFileDialog(self, caption='Select impala schema file')
-        schema_filepath: str = str(dialog.getOpenFileName()[0])
+        schema_filepath: str = str(QFileDialog.getOpenFileName(None, 'Select impala schema file')[0])
         if schema_filepath:
             tables_dict: Dict[str, List[Tuple[str, str]]] = {}
             with open(schema_filepath, 'r') as file:

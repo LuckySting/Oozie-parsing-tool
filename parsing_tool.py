@@ -111,13 +111,25 @@ def extract_tables(statement: str, table_names: Set[str]) -> List[str]:
     :return: set of used table names
     """
     used_table_names: List[str] = []
-    for table_name in table_names:
-        valid_name = re.match(r'^\S+\.\S+$', table_name)
-        if not valid_name:
+    hql_script: str = statement.lower().replace('\n', ' ').strip()
+    for word in hql_script.split(' '):
+        if word == '':
             continue
-        without_schema: str = table_name.split('.')[1]
-        if statement.find(f' {table_name} ') != -1 or statement.find(f' {without_schema} ') != -1:
-            used_table_names.append(table_name)
+        name = sqlparse.parse(word)[0].token_first()
+        if not name:
+            continue
+        if not isinstance(name, sqlparse.sql.Identifier) and name.ttype != sqlparse.tokens.Name:
+            continue
+        for table_name in table_names:
+            valid_name = re.match(r'^\S+\.\S+$', table_name)
+            if not valid_name:
+                continue
+            only_name: str = table_name.split('.')[1].lower()
+            if table_name == 'aa.rd_optimizely_x_ga_filtered_collisions':
+                b = 1
+            if word == table_name or word == only_name:
+                used_table_names.append(table_name)
+                break
     return used_table_names
 
 
@@ -152,6 +164,7 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
     table_used_in: Set[Tuple[int, int]] = set()
     for statement in sqlparse.parse(script_text):
         command = statement.token_first(True, True)
+        lower_statement: str = statement.normalized.lower().replace('\n', ' ')
         if not command:
             continue
         if command.normalized == 'CREATE':
@@ -174,6 +187,18 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
             table_based_on.update(((inserted_table_id, b_t_i) for b_t_i in base_tables_ids))
             table_updated_in.update(((inserted_table_id, workflow_id),))
             table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
+        elif command.normalized == 'WITH':
+            sub_statements: List[str] = lower_statement.split('insert')
+            table_names: List[str] = list(reversed(extract_tables(sub_statements[1], all_table_names)))
+            if len(table_names) == 0:
+                continue
+            inserted_table_name = table_names.pop()
+            inserted_table_id = tables_name_id_dict[inserted_table_name]
+            table_names += extract_tables(sub_statements[0], all_table_names)
+            base_tables_ids = [tables_name_id_dict[t_n] for t_n in table_names]
+            table_based_on.update(((inserted_table_id, b_t_i) for b_t_i in base_tables_ids))
+            table_updated_in.update(((inserted_table_id, workflow_id),))
+            table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
         else:
             pass
     return table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
@@ -191,6 +216,8 @@ def parse_workflow(path_to_workflow_xml: str, workflow_id: int, table_id_name_pa
         root = ElementTree(file=workflow_xml).getroot()
     path_to_workflow = os.path.sep.join(path_to_workflow_xml.split(os.path.sep)[:-1])
     workflow_name = path_to_workflow.split(os.path.sep)[-1]
+    if workflow_name == 'wf_mrr_all_products_daily_report':
+        b = 1
     r_g = resolve_global(path_to_workflow)
     next(r_g)
     tables_id_name_dict: Dict[int, str] = {t[0]: t[1] for t in table_id_name_pairs}

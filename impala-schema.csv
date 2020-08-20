@@ -14696,13 +14696,7 @@ dm,business_partner_dimension,business_partner_state_name,string
 src,webanalytics_attribution_v4_snapshot,contact_type,string
 rev,hist_sf_task,activity_id,string
 src,barrister_professional_contact_by_chat,consumer_user_id,string
-default,customers,addresses,"map<string,struct<"
-"  street_1:string,",NULL,,
-"  street_2:string,",NULL,,
-"  city:string,",NULL,,
-"  state:string,",NULL,,
-  zip_code:string,NULL,,
->>,NULL,,
+default,customers,addresses,"map<string,struct>"
 rev,historical_professional_dimension_20200307_2,etl_effective_error_flag,string
 dm,deferred_revenue,avvo_rating,"decimal(4,2)"
 rev,profnl_delivered_impressions_daily_20170320,ad_id,int
@@ -30827,14 +30821,7 @@ tmp_data_dm,rd_sr_als_transactions_temp,last_purchase_date,string
 rev,historical_subscription_price_dimension,deleted_datetime,string
 tmp_data_dm,global_ad_weights_modified,sold_ad_market_type,string
 tmp_data_dm,coe_t_baseline_2017_08_01,day,int
-default,customers,email_preferences,struct<
-"  email_format:string,",NULL,,
-"  frequency:string,",NULL,,
-  categories:struct<,NULL,,
-"    promos:boolean,",NULL,,
-    surveys:boolean,NULL,,
-  >,NULL,,
->,NULL,,
+default,customers,email_preferences,struct
 tmp_data_dm,yw_imp_201701_201705,adblock_imps,bigint
 rev,market_intelligence_detail_20160713,sl_subscription_price,double
 rev,bing_report_temp_data_fix,campaignname,string
@@ -36312,17 +36299,7 @@ tmp_data_dm,call_att_sid_updates2_j_nov19_dec19,rownumorder,bigint
 src,hist_pws_aggregate_site_aop_geo,city_id,int
 rev,hist_mi_ad_market_detail_20161201,ad_revenue,"decimal(31,2)"
 aa,mkt_ar_ad_revenue,county,string
-default,customers,orders,array<struct<
-"  order_id:string,",NULL,,
-"  order_date:string,",NULL,,
-  items:array<struct<,NULL,,
-"    product_id:int,",NULL,,
-"    sku:string,",NULL,,
-"    name:string,",NULL,,
-"    price:double,",NULL,,
-    qty:int,NULL,,
-  >>,NULL,,
->>,NULL,,
+default,customers,orders,array
 rev,robert_before,best_answer,string
 dm,sf_ae_am,professional_id,bigint
 rev,mrr_customer_monthly_20180828_0506,has_ads_during_month_prior,string
@@ -49392,11 +49369,7 @@ dm,contact_event_metrics_daily,index_type,string
 rev,mrr_customer_monthly_201811_20181206,tenure_month_prev,bigint
 src,weblog,query,string
 dm,sf_onetime_leads_report,client_reviews_all_time__c,string
-rev,clickstream_events_parquet,event,struct<
-"  name:string,",NULL,,
-"  timestamp:int,",NULL,,
-  app_id:string,NULL,,
->,NULL,,
+rev,clickstream_events_parquet,event,struct
 aa,mkt_traffic_contacts_datasource_hist,year,int
 tmp_data_dm,sr_paid_channels,sessions_paid_fb_als,bigint
 rev,order_line_accumulation_fact_20200407_2,order_line_purchase_date,string
@@ -57316,13 +57289,7 @@ dm,amm_subscription_mrr_snapshot,blocks_purchased,int
 dm,census_data,number_sex_and_age_female_population_median_age_years,int
 aa,mkt_t_attributed_value,subchannel,string
 rev,sf_full_dataset,county_3__c,string
-rev,clickstream_events_parquet,browser_info,struct<
-"  render_instance_guid:string,",NULL,,
-"  remote_ip:string,",NULL,,
-"  user_agent:string,",NULL,,
-"  session_id:string,",NULL,,
-  persistent_session_id:string,NULL,,
->,NULL,,
+rev,clickstream_events_parquet,browser_info,struct
 aa,roy_weblog_stage,name,string
 tmp_data_dm,messages_contacts_djfmam,year_month,bigint
 tmp_data_dm,traffic_session_non_misc_201907_kam,lpv_device_category_id,int
