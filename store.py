@@ -211,7 +211,7 @@ class Store:
             return [d[1] for d in tables]
         if id_name_pairs:
             return [(d[0], d[1]) for d in tables]
-        return [self.populate_table_data(Table(*d)) for d in tables]
+        return [Table(*d) for d in tables]
 
     def get_workflows(self, search_text: str = '', only_names: bool = False, color_filter: List[Color] = None) -> List[
         Union[str, Workflow]]:
@@ -267,7 +267,7 @@ class Store:
     def populate_workflow_data(self, workflow: Workflow):
         cursor: sqlite3.Cursor = self.connection.cursor()
         relations: List[Tuple] = cursor.execute(
-            'SELECT TBO.TARGET_TABLE, TBO.BASE_TABLE FROM TABLE_BASED_ON TBO JOIN TABLES T WHERE TBO.BASE_TABLE = T.ID;'
+            'SELECT TARGET_TABLE, BASE_TABLE FROM TABLE_BASED_ON;'
         ).fetchall()
         relations_dict: Dict[int, Set[int]] = {}
         for r in relations:
@@ -277,18 +277,15 @@ class Store:
                 relations_dict[r[0]].add(r[1])
 
         used_tables: List[Tuple] = cursor.execute(
-            'SELECT TABLES.ID, TABLES.NAME FROM TABLE_USED_IN JOIN TABLES WHERE WORKFLOW = ? AND USED_TABLE = TABLES.ID;',
+            'SELECT TABLES.ID, TABLES.NAME, TABLES.MEANING, TABLES.AUTHORS, TABLES.SQOOPED, TABLES.COLOR FROM TABLE_USED_IN JOIN TABLES WHERE WORKFLOW = ? AND USED_TABLE = TABLES.ID;',
             (workflow.index,)
         ).fetchall()
-        used_tables_dict: Dict[int, str] = {t[0]: t[1] for t in used_tables}
-        used_tables: Set[int] = set(used_tables_dict.keys())
-        src_tables: Set[int] = set()
-        while len(used_tables):
-            table_id: int = used_tables.pop()
-            src_tables.add(table_id)
-            if table_id in relations:
-                used_tables.update(relations[table_id])
-        workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
+        used_tables: List[Table] = [self.populate_table_data(Table(*t)) for t in used_tables]
+        src_tables: Set[str] = set()
+        for u_t in used_tables:
+            src_tables.add(u_t.name)
+            src_tables.update(u_t.based_on_tables)
+        workflow.source_tables += list(src_tables)
 
         effected_tables: List[Tuple] = cursor.execute(
             """
@@ -326,6 +323,19 @@ class Store:
 
     def populate_table_data(self, table: Table) -> Table:
         cursor: sqlite3.Cursor = self.connection.cursor()
+        relations: List[Tuple] = cursor.execute(
+            'SELECT TARGET_TABLE, BASE_TABLE FROM TABLE_BASED_ON;'
+        ).fetchall()
+        relations_dict: Dict[int, Set[int]] = {}
+        for r in relations:
+            if r[0] not in relations_dict:
+                relations_dict[r[0]] = {r[1]}
+            else:
+                relations_dict[r[0]].add(r[1])
+        table_id_name: List[Tuple] = cursor.execute(
+            'SELECT ID, NAME FROM TABLES'
+        ).fetchall()
+        table_id_name_dict: Dict[int, str] = {t[0]: t[1] for t in table_id_name}
         used_in = cursor.execute("""
             SELECT DISTINCT WORKFLOWS.NAME FROM TABLE_USED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_USED_IN.WORKFLOW AND USED_TABLE = ?
         """, (table.index,)).fetchall()
@@ -339,9 +349,16 @@ class Store:
                         """, (table.index,)).fetchall()
         updated_in = {u[0] for u in updated_in}
         based_on = cursor.execute("""
-                                    SELECT DISTINCT TABLES.NAME FROM TABLE_BASED_ON JOIN TABLES ON TABLES.ID = BASE_TABLE AND TARGET_TABLE = ?
+                                    SELECT DISTINCT BASE_TABLE FROM TABLE_BASED_ON WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
-        based_on = {b[0] for b in based_on}
+        based_on_tables: Set[int] = {t[0] for t in based_on}
+        base_tables: Set[int] = set()
+        while len(based_on_tables):
+            table_id: int = based_on_tables.pop()
+            base_tables.add(table_id)
+            if table_id in relations_dict:
+                based_on_tables.update(relations_dict[table_id].difference(base_tables))
+        based_on = [table_id_name_dict[i] for i in base_tables]
         partitions = cursor.execute("""
                                     SELECT DISTINCT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()

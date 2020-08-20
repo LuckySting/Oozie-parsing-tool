@@ -194,21 +194,15 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         for table in self.store.get_tables(search_text=search_text, color_filter=self.db_color_filter):
             color: QColor = QColor(Color.to_q_color(table.color))
             brush: QBrush = QBrush(color)
-            if len(table.updated_in_workflows) or len(table.created_in_workflows) or len(table.used_in_workflows):
-                if not self.unplugged:
-                    item = QStandardItem(table.name)
-                    item.setForeground(brush)
-                    item.setEditable(False)
-                    self.db_table_list_model.appendRow(item)
-            else:
-                if self.unplugged:
-                    item = QStandardItem(table.name)
-                    item.setEditable(False)
-                    item.setForeground(brush)
-                    self.db_table_list_model.appendRow(item)
+            item = QStandardItem(table.name)
+            item.setEditable(False)
+            item.setForeground(brush)
+            self.db_table_list_model.appendRow(item)
+
 
     def fill_db_fields(self) -> None:
         if self.current_table:
+            self.store.populate_table_data(self.current_table)
             self.db_description_input.setText(self.current_table.meaning)
             self.db_authors_input.setText(self.current_table.authors)
             self.db_set_color(self.current_table.color)
