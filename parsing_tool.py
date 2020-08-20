@@ -11,6 +11,11 @@ from store import Store
 
 
 def index_generator(start: int) -> int:
+    """
+    Generates unique integers
+    :param start: start from
+    :return: int value
+    """
     i = start
     while True:
         yield i
@@ -18,6 +23,11 @@ def index_generator(start: int) -> int:
 
 
 def resolve_global(path_to_workflow: str):
+    """
+    Coroutine, opens job.properties file and generates dict to resolve global variables
+    :param path_to_workflow: path to workflow
+    :return:
+    """
     path_to_job_properties: str = os.path.join(path_to_workflow, 'job.properties')
     dictionary: Dict[str, str] = {}
     try:
@@ -39,6 +49,12 @@ def resolve_global(path_to_workflow: str):
 
 
 def replace_global(string: str, resolver: Generator) -> str:
+    """
+    Replaces all global variables in string, using resolver
+    :param string: string to replace
+    :param resolver: aimed resolve_global generator
+    :return: string without globals
+    """
     for gl in re.findall(r'\${[^${}]+}', string):
         repl = resolver.send(gl[2:-1])
         next(resolver)
@@ -68,6 +84,12 @@ def parse_sqoop(el: Element) -> str:
 
 
 def get_hive_script(path_to_workflow: str, el: Element) -> str:
+    """
+    Find path to script file in workflow.xml action and read it's content
+    :param path_to_workflow: path to workflow
+    :param el: workflow action
+    :return: script text
+    """
     script_path: str = path_to_workflow
     for el_ in el:
         if 'script' in el_.tag:
@@ -88,7 +110,15 @@ def extract_tables(statement: str, table_names: Set[str]) -> List[str]:
     :param table_names: set of known table names
     :return: set of used table names
     """
-    return [t_n for t_n in table_names if f' {t_n} ' or f' {t_n.split(".")[1]} ' in statement]
+    used_table_names: List[str] = []
+    for table_name in table_names:
+        valid_name = re.match(r'^\S+\.\S+$', table_name)
+        if not valid_name:
+            continue
+        without_schema: str = table_name.split('.')[1]
+        if statement.find(f' {table_name} ') != -1 or statement.find(f' {without_schema} ') != -1:
+            used_table_names.append(table_name)
+    return used_table_names
 
 
 def extract_partitions(statement) -> Set[str]:
@@ -145,7 +175,7 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
             table_updated_in.update(((inserted_table_id, workflow_id),))
             table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
         else:
-            a = 1
+            pass
     return table_based_on, table_created_in, table_partitions, table_updated_in, table_used_in
 
 
@@ -240,5 +270,5 @@ def parse_workflows_coroutine(working_dir: str, table_id_name_pairs: List[Tuple[
 
 if __name__ == '__main__':
     store = Store('db.sqlite3')
-    for a in parse_workflows_coroutine('./workflow_small', store.get_tables(id_name_pairs=True)):
+    for a in parse_workflows_coroutine('./workflow', store.get_tables(id_name_pairs=True)):
         print(a)

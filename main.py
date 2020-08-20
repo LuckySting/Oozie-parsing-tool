@@ -38,7 +38,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.store.insert_table_partitions(table_partitions)
             finally:
                 self.stackedWidget.setCurrentIndex(0)
-            self.wf_filter_workflows('')
+            self.wf_filter_workflows()
             self.set_menu_state()
 
     def insert_tables_from_schema_coroutine(self, tables_list: List[str]) -> bool:
@@ -131,7 +131,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_filter_tables()
             self.set_menu_state()
 
-    def wf_filter_workflows(self, search_text: str) -> None:
+    def clear_database(self) -> None:
+        self.store.create_db_tables(force=True)
+        self.set_menu_state()
+        self.db_filter_tables()
+        self.wf_filter_workflows()
+
+    def wf_filter_workflows(self) -> None:
+        search_text: str = self.wf_workflow_search.text()
         self.wf_workflow_list_model.clear()
         for workflow in self.store.get_workflows(search_text, only_names=True):
             item = QStandardItem(workflow)
@@ -227,6 +234,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.current_table.authors = self.db_authors_input.toPlainText()
             self.current_table.color = self.db_get_color()
             self.store.update_table(self.current_table)
+            self.db_filter_tables()
 
     def db_set_color(self, color: Color):
         if color is Color.RED:
@@ -342,9 +350,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.action_open_workflows.triggered.connect(self.select_workflows_directory)
         self.action_extract_hive.triggered.connect(self.extract_hive_schema)
         self.action_exctract_impala.triggered.connect(self.extract_impala_schema)
+        self.action_clear_database.triggered.connect(self.clear_database)
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
-        self.wf_filter_workflows('')
+        self.wf_filter_workflows()
 
         self.db_table_list_model = QStandardItemModel(self.db_table_list)
         self.db_table_list.setModel(self.db_table_list_model)

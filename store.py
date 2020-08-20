@@ -185,7 +185,8 @@ class Store:
         self.connection.commit()
         cursor.close()
 
-    def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False, id_name_pairs: bool = False) -> List[Union[str, Table, Tuple[int, str]]]:
+    def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False,
+                   id_name_pairs: bool = False) -> List[Union[str, Table, Tuple[int, str]]]:
         if color_filter is None:
             color_filter = []
         sql: str = 'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED, COLOR FROM TABLES WHERE instr(NAME, ?) > 0'
@@ -261,24 +262,23 @@ class Store:
             used_tables_dict: Dict[int, str] = {t[0]: t[1] for t in used_tables}
             used_tables: Set[int] = set(used_tables_dict.keys())
             src_tables: Set[int] = set()
-            pot_tables: Set[int] = used_tables.copy()
-            pas_tables: Set[int] = set()
-            while len(pot_tables):
-                t_i = pot_tables.pop()
-                if t_i not in relations_dict:
-                    if t_i in used_tables_dict:
-                        pas_tables.add(t_i)
-                        continue
-                else:
-                    src_tbs = relations_dict[t_i].difference(pas_tables)
-                    pas_tables.add(t_i)
-                    pot_tables.update(src_tbs)
-                    for t_n in src_tbs:
-                        if t_n in used_tables_dict:
-                            src_tables.add(t_n)
-            effected_tables = used_tables.difference(src_tables)
-            workflow.effected_tables += [used_tables_dict[t_i] for t_i in effected_tables]
+            while len(used_tables):
+                table_id: int = used_tables.pop()
+                src_tables.add(table_id)
+                if table_id in relations:
+                    used_tables.update(relations[table_id])
             workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
+
+            effected_tables: List[Tuple] = cursor.execute(
+                """
+                SELECT T.NAME FROM TABLE_CREATED_IN TCI JOIN TABLES T ON TCI.CREATED_TABLE = T.ID AND TCI.WORKFLOW = ?
+                UNION
+                SELECT T.NAME FROM TABLE_UPDATED_IN TUI JOIN TABLES T ON TUI.UPDATED_TABLE = T.ID AND TUI.WORKFLOW = ?
+                """, (workflow.index, workflow.index)
+            )
+            effected_tables: Set[str] = {t[0] for t in effected_tables}
+            workflow.effected_tables = effected_tables
+
             predecessors_sql: str = f"""
                 SELECT DISTINCT WORKFLOWS.NAME
                 FROM WORKFLOWS JOIN
@@ -306,38 +306,36 @@ class Store:
     def populate_table_data(self, table: Table) -> Table:
         cursor: sqlite3.Cursor = self.connection.cursor()
         used_in = cursor.execute("""
-            SELECT WORKFLOWS.NAME FROM TABLE_USED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_USED_IN.WORKFLOW AND USED_TABLE = ?
+            SELECT DISTINCT WORKFLOWS.NAME FROM TABLE_USED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_USED_IN.WORKFLOW AND USED_TABLE = ?
         """, (table.index,)).fetchall()
         used_in = {u[0] for u in used_in}
         created_in = cursor.execute("""
-                    SELECT WORKFLOWS.NAME FROM TABLE_CREATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_CREATED_IN.WORKFLOW AND CREATED_TABLE = ?
+                    SELECT DISTINCT WORKFLOWS.NAME FROM TABLE_CREATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_CREATED_IN.WORKFLOW AND CREATED_TABLE = ?
                 """, (table.index,)).fetchall()
         created_in = {c[0] for c in created_in}
         updated_in = cursor.execute("""
-                            SELECT WORKFLOWS.NAME FROM TABLE_UPDATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_UPDATED_IN.WORKFLOW AND UPDATED_TABLE = ?
+                            SELECT DISTINCT WORKFLOWS.NAME FROM TABLE_UPDATED_IN JOIN WORKFLOWS ON WORKFLOWS.ID = TABLE_UPDATED_IN.WORKFLOW AND UPDATED_TABLE = ?
                         """, (table.index,)).fetchall()
         updated_in = {u[0] for u in updated_in}
         based_on = cursor.execute("""
-                                    SELECT TABLES.NAME FROM TABLE_BASED_ON JOIN TABLES ON TABLES.ID = BASE_TABLE AND TARGET_TABLE = ?
+                                    SELECT DISTINCT TABLES.NAME FROM TABLE_BASED_ON JOIN TABLES ON TABLES.ID = BASE_TABLE AND TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
         based_on = {b[0] for b in based_on}
         partitions = cursor.execute("""
-                                    SELECT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
+                                    SELECT DISTINCT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
         partitions = {p[0] for p in partitions}
         columns = cursor.execute("""
-                                SELECT COLUMN_NAME||'['||COLUMN_TYPE||']' FROM TABLE_COLUMNS WHERE TABLE_ID = ?
-                                """, (table.index, )).fetchall()
+                                SELECT DISTINCT COLUMN_NAME||'['||COLUMN_TYPE||']' FROM TABLE_COLUMNS WHERE TABLE_ID = ?
+                                """, (table.index,)).fetchall()
         columns = {c[0] for c in columns}
         cursor.close()
-        used_in = used_in.difference(created_in)
-        used_in = used_in.difference(updated_in)
-        table.created_in_workflows += list(created_in)
-        table.used_in_workflows += list(used_in)
-        table.updated_in_workflows += list(updated_in)
-        table.based_on_tables += list(based_on)
-        table.partitions += list(partitions)
-        table.columns += list(columns)
+        table.created_in_workflows = list(created_in)
+        table.used_in_workflows = list(used_in)
+        table.updated_in_workflows = list(updated_in)
+        table.based_on_tables = list(based_on)
+        table.partitions = list(partitions)
+        table.columns = list(columns)
         return table
 
     def insert_new_table(self, table_name) -> Table:
