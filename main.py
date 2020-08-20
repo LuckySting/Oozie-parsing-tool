@@ -5,7 +5,7 @@ from typing import List, Tuple, Dict
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
-from PyQt5.QtWidgets import QFileDialog, QAbstractItemView
+from PyQt5.QtWidgets import QFileDialog, QAbstractItemView, QApplication
 
 import design
 from store import Store, Table, Workflow, Color
@@ -397,6 +397,17 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.action_exctract_impala.setEnabled(False)
             self.action_open_workflows.setEnabled(False)
 
+    def copy_list_to_clipboard(self):
+        tab_id: int = self.tabWidget.currentIndex()
+        if tab_id == 0:
+            db_list: str = '\n'.join(
+                [self.db_table_list_model.item(r_i, 0).text() for r_i in range(self.db_table_list_model.rowCount())])
+            QApplication.clipboard().setText(db_list)
+        elif tab_id == 1:
+            wf_list: str = '\n'.join(
+                [self.wf_workflow_list_model.item(r_i, 0).text() for r_i in range(self.wf_workflow_list_model.rowCount())])
+            QApplication.clipboard().setText(wf_list)
+
     def __init__(self):
         super().__init__()
         self.store: Store = Store('db.sqlite3')
@@ -424,6 +435,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.action_extract_hive.triggered.connect(self.extract_hive_schema)
         self.action_exctract_impala.triggered.connect(self.extract_impala_schema)
         self.action_clear_database.triggered.connect(self.clear_database)
+        self.action_copy_list_to_clipboard.triggered.connect(self.copy_list_to_clipboard)
+
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
         self.wf_blue_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.BLUE))
