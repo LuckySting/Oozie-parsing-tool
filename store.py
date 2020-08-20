@@ -76,7 +76,7 @@ class Workflow:
             descendants = list()
         self.index: int = index
         self.name: str = name
-        self.color: Color = color
+        self.color: Color = Color(color)
         self.source_tables: List[str] = source_tables
         self.effected_tables: List[str] = effected_tables
         self.predecessors: List[str] = predecessors
@@ -178,6 +178,13 @@ class Store:
         """)
         cursor.close()
 
+    def update_workflow(self, workflow: Workflow) -> None:
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        cursor.execute('UPDATE WORKFLOWS SET COLOR=? WHERE ID = ?',
+                       (workflow.color.value, workflow.index))
+        self.connection.commit()
+        cursor.close()
+
     def update_table(self, table: Table) -> None:
         cursor: sqlite3.Cursor = self.connection.cursor()
         cursor.execute('UPDATE TABLES SET MEANING=?, AUTHORS=?, COLOR=? WHERE ID = ?',
@@ -191,7 +198,11 @@ class Store:
             color_filter = []
         sql: str = 'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED, COLOR FROM TABLES WHERE instr(NAME, ?) > 0'
         if len(color_filter) > 0:
-            where_color: str = ' AND COLOR IN (' + ', '.join([f'\'{c.value}\'' for c in color_filter]) + ')'
+            if Color.NONE not in color_filter:
+                where_color: str = ' AND COLOR IN (' + ', '.join([f'\'{c.value}\'' for c in color_filter]) + ')'
+            else:
+                where_color: str = ' AND (COLOR IN (' + ', '.join(
+                    [f'\'{c.value}\'' for c in color_filter]) + ') OR COLOR IS NULL)'
             sql += where_color
         cursor: sqlite3.Cursor = self.connection.cursor()
         tables: List[Tuple] = cursor.execute(sql, (search_text,)).fetchall()
@@ -201,6 +212,26 @@ class Store:
         if id_name_pairs:
             return [(d[0], d[1]) for d in tables]
         return [self.populate_table_data(Table(*d)) for d in tables]
+
+    def get_workflows(self, search_text: str = '', only_names: bool = False, color_filter: List[Color] = None) -> List[
+        Union[str, Workflow]]:
+        if color_filter is None:
+            color_filter = []
+        sql: str = 'SELECT ID, NAME, COLOR FROM WORKFLOWS WHERE instr(NAME, ?) > 0'
+        if len(color_filter) > 0:
+            if Color.NONE not in color_filter:
+                where_color: str = ' AND COLOR IN (' + ', '.join([f'\'{c.value}\'' for c in color_filter]) + ')'
+            else:
+                where_color: str = ' AND (COLOR IN (' + ', '.join(
+                    [f'\'{c.value}\'' for c in color_filter]) + ') OR COLOR IS NULL)'
+            sql += where_color
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        workflows: List[Tuple] = cursor.execute(
+            sql, (search_text,)).fetchall()
+        cursor.close()
+        if only_names:
+            return [d[1] for d in workflows]
+        return [Workflow(*d) for d in workflows]
 
     def get_tables_by_names(self, table_names: List[str]) -> List[Table]:
         cursor: sqlite3.Cursor = self.connection.cursor()
@@ -219,15 +250,6 @@ class Store:
         cursor.close()
         return [Workflow(*d) for d in workflows]
 
-    def get_workflows(self, search_text: str = '', only_names: bool = False) -> List[Union[str, Workflow]]:
-        cursor: sqlite3.Cursor = self.connection.cursor()
-        workflows: List[Tuple] = cursor.execute(
-            'SELECT ID, NAME, COLOR FROM WORKFLOWS WHERE instr(NAME, ?) > 0;', (search_text,)).fetchall()
-        cursor.close()
-        if only_names:
-            return [d[1] for d in workflows]
-        return [Workflow(*d) for d in workflows]
-
     def get_db_status(self) -> str:
         cursor: sqlite3.Cursor = self.connection.cursor()
         workflows_exists: bool = int(cursor.execute('SELECT COUNT(*) FROM WORKFLOWS').fetchall()[0][0]) > 0
@@ -242,7 +264,7 @@ class Store:
         else:
             return 'db_empty'
 
-    def populate_workflows_data(self, workflows: List[Workflow]):
+    def populate_workflow_data(self, workflow: Workflow):
         cursor: sqlite3.Cursor = self.connection.cursor()
         relations: List[Tuple] = cursor.execute(
             'SELECT TBO.TARGET_TABLE, TBO.BASE_TABLE FROM TABLE_BASED_ON TBO JOIN TABLES T WHERE TBO.BASE_TABLE = T.ID;'
@@ -254,53 +276,52 @@ class Store:
             else:
                 relations_dict[r[0]].add(r[1])
 
-        for workflow in workflows:
-            used_tables: List[Tuple] = cursor.execute(
-                'SELECT TABLES.ID, TABLES.NAME FROM TABLE_USED_IN JOIN TABLES WHERE WORKFLOW = ? AND USED_TABLE = TABLES.ID;',
-                (workflow.index,)
-            ).fetchall()
-            used_tables_dict: Dict[int, str] = {t[0]: t[1] for t in used_tables}
-            used_tables: Set[int] = set(used_tables_dict.keys())
-            src_tables: Set[int] = set()
-            while len(used_tables):
-                table_id: int = used_tables.pop()
-                src_tables.add(table_id)
-                if table_id in relations:
-                    used_tables.update(relations[table_id])
-            workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
+        used_tables: List[Tuple] = cursor.execute(
+            'SELECT TABLES.ID, TABLES.NAME FROM TABLE_USED_IN JOIN TABLES WHERE WORKFLOW = ? AND USED_TABLE = TABLES.ID;',
+            (workflow.index,)
+        ).fetchall()
+        used_tables_dict: Dict[int, str] = {t[0]: t[1] for t in used_tables}
+        used_tables: Set[int] = set(used_tables_dict.keys())
+        src_tables: Set[int] = set()
+        while len(used_tables):
+            table_id: int = used_tables.pop()
+            src_tables.add(table_id)
+            if table_id in relations:
+                used_tables.update(relations[table_id])
+        workflow.source_tables += [used_tables_dict[t_i] for t_i in src_tables]
 
-            effected_tables: List[Tuple] = cursor.execute(
-                """
-                SELECT T.NAME FROM TABLE_CREATED_IN TCI JOIN TABLES T ON TCI.CREATED_TABLE = T.ID AND TCI.WORKFLOW = ?
+        effected_tables: List[Tuple] = cursor.execute(
+            """
+            SELECT T.NAME FROM TABLE_CREATED_IN TCI JOIN TABLES T ON TCI.CREATED_TABLE = T.ID AND TCI.WORKFLOW = ?
+            UNION
+            SELECT T.NAME FROM TABLE_UPDATED_IN TUI JOIN TABLES T ON TUI.UPDATED_TABLE = T.ID AND TUI.WORKFLOW = ?
+            """, (workflow.index, workflow.index)
+        )
+        effected_tables: Set[str] = {t[0] for t in effected_tables}
+        workflow.effected_tables = effected_tables
+
+        predecessors_sql: str = f"""
+            SELECT DISTINCT WORKFLOWS.NAME
+            FROM WORKFLOWS JOIN
+            (
+                SELECT CREATED_TABLE AS T_ID, WORKFLOW AS W_ID FROM TABLE_CREATED_IN
                 UNION
-                SELECT T.NAME FROM TABLE_UPDATED_IN TUI JOIN TABLES T ON TUI.UPDATED_TABLE = T.ID AND TUI.WORKFLOW = ?
-                """, (workflow.index, workflow.index)
+                SELECT * FROM TABLE_UPDATED_IN
             )
-            effected_tables: Set[str] = {t[0] for t in effected_tables}
-            workflow.effected_tables = effected_tables
-
-            predecessors_sql: str = f"""
-                SELECT DISTINCT WORKFLOWS.NAME
-                FROM WORKFLOWS JOIN
-                (
-                    SELECT CREATED_TABLE AS T_ID, WORKFLOW AS W_ID FROM TABLE_CREATED_IN
-                    UNION
-                    SELECT * FROM TABLE_UPDATED_IN
-                )
-                on WORKFLOWS.ID = W_ID
-                JOIN TABLES WHERE T_ID = TABLES.ID
-                AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.source_tables])[:-2]});
-            """
-            descendants_sql: str = f"""
-                SELECT DISTINCT WORKFLOWS.NAME
-                FROM WORKFLOWS JOIN TABLE_USED_IN
-                on WORKFLOWS.ID = WORKFLOW
-                JOIN TABLES WHERE USED_TABLE = TABLES.ID
-                AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.effected_tables])[:-2]});
-            """
-            workflow.predecessors = [t[0] for t in cursor.execute(predecessors_sql).fetchall() if t[0] != workflow.name]
-            workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if
-                                    t[0] != workflow.name and t[0] not in workflow.predecessors]
+            on WORKFLOWS.ID = W_ID
+            JOIN TABLES WHERE T_ID = TABLES.ID
+            AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.source_tables])[:-2]});
+        """
+        descendants_sql: str = f"""
+            SELECT DISTINCT WORKFLOWS.NAME
+            FROM WORKFLOWS JOIN TABLE_USED_IN
+            on WORKFLOWS.ID = WORKFLOW
+            JOIN TABLES WHERE USED_TABLE = TABLES.ID
+            AND TABLES.NAME IN ({''.join([f"'{s}', " for s in workflow.effected_tables])[:-2]});
+        """
+        workflow.predecessors = [t[0] for t in cursor.execute(predecessors_sql).fetchall() if t[0] != workflow.name]
+        workflow.descendants = [t[0] for t in cursor.execute(descendants_sql).fetchall() if
+                                t[0] != workflow.name and t[0] not in workflow.predecessors]
         cursor.close()
 
     def populate_table_data(self, table: Table) -> Table:

@@ -140,43 +140,58 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def wf_filter_workflows(self) -> None:
         search_text: str = self.wf_workflow_search.text()
         self.wf_workflow_list_model.clear()
-        for workflow in self.store.get_workflows(search_text, only_names=True):
-            item = QStandardItem(workflow)
+        for workflow in self.store.get_workflows(search_text, color_filter=self.wf_color_filter):
+            color: QColor = QColor(Color.to_q_color(workflow.color))
+            brush: QBrush = QBrush(color)
+            item = QStandardItem(workflow.name)
+            item.setForeground(brush)
             item.setEditable(False)
             self.wf_workflow_list_model.appendRow(item)
 
     def wf_select_workflows(self) -> None:
-        workflow_names: List[str] = []
-        for select in self.wf_workflow_list.selectionModel().selectedIndexes():
-            workflow_names.append(select.data(Qt.DisplayRole))
-        workflows = self.store.get_workflows_by_names(workflow_names)
-        self.store.populate_workflows_data(workflows)
-        self.wf_effected_list_model.clear()
-        self.wf_source_list_model.clear()
-        self.wf_predecessors_list_model.clear()
-        self.wf_descendants_list_model.clear()
-        for workflow in workflows:
-            for ef_t in workflow.effected_tables:
+        workflow_name: str = self.wf_workflow_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
+        try:
+            workflow: Workflow = self.store.get_workflows(workflow_name)[0]
+            self.store.populate_workflow_data(workflow)
+            self.current_workflow = workflow
+            self.fill_wf_fields()
+        except IndexError:
+            pass
+
+    def fill_wf_fields(self) -> None:
+        if self.current_workflow:
+            self.wf_set_color(self.current_workflow.color)
+            self.wf_effected_list_model.clear()
+            self.wf_source_list_model.clear()
+            self.wf_predecessors_list_model.clear()
+            self.wf_descendants_list_model.clear()
+            for ef_t in self.current_workflow.effected_tables:
                 item = QStandardItem(ef_t)
                 item.setEditable(False)
                 self.wf_effected_list_model.appendRow(item)
-            for src_t in workflow.source_tables:
+            for src_t in self.current_workflow.source_tables:
                 item = QStandardItem(src_t)
                 item.setEditable(False)
                 self.wf_source_list_model.appendRow(item)
-            for p_w in workflow.predecessors:
+            for p_w in self.current_workflow.predecessors:
                 item = QStandardItem(p_w)
                 item.setEditable(False)
                 self.wf_predecessors_list_model.appendRow(item)
-            for d_w in workflow.descendants:
+            for d_w in self.current_workflow.descendants:
                 item = QStandardItem(d_w)
                 item.setEditable(False)
                 self.wf_descendants_list_model.appendRow(item)
 
+    def save_wf_fields(self) -> None:
+        if self.current_workflow:
+            self.current_workflow.color = self.wf_get_color()
+            self.store.update_workflow(self.current_workflow)
+            self.wf_filter_workflows()
+
     def db_filter_tables(self) -> None:
         search_text: str = self.db_table_search.text()
         self.db_table_list_model.clear()
-        for table in self.store.get_tables(search_text=search_text, color_filter=self.color_filter):
+        for table in self.store.get_tables(search_text=search_text, color_filter=self.db_color_filter):
             color: QColor = QColor(Color.to_q_color(table.color))
             brush: QBrush = QBrush(color)
             if len(table.updated_in_workflows) or len(table.created_in_workflows) or len(table.used_in_workflows):
@@ -268,6 +283,38 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_green_color_button.setChecked(False)
             self.db_none_color_button.setChecked(True)
 
+    def wf_set_color(self, color: Color):
+        if color is Color.RED:
+            self.wf_red_color_button.setChecked(True)
+            self.wf_blue_color_button.setChecked(False)
+            self.wf_yellow_color_button.setChecked(False)
+            self.wf_green_color_button.setChecked(False)
+            self.wf_none_color_button.setChecked(False)
+        elif color is Color.BLUE:
+            self.wf_red_color_button.setChecked(False)
+            self.wf_blue_color_button.setChecked(True)
+            self.wf_yellow_color_button.setChecked(False)
+            self.wf_green_color_button.setChecked(False)
+            self.wf_none_color_button.setChecked(False)
+        elif color is Color.YELLOW:
+            self.wf_red_color_button.setChecked(False)
+            self.wf_blue_color_button.setChecked(False)
+            self.wf_yellow_color_button.setChecked(True)
+            self.wf_green_color_button.setChecked(False)
+            self.wf_none_color_button.setChecked(False)
+        elif color is Color.GREEN:
+            self.wf_red_color_button.setChecked(False)
+            self.wf_blue_color_button.setChecked(False)
+            self.wf_yellow_color_button.setChecked(False)
+            self.wf_green_color_button.setChecked(True)
+            self.wf_none_color_button.setChecked(False)
+        else:
+            self.wf_red_color_button.setChecked(False)
+            self.wf_blue_color_button.setChecked(False)
+            self.wf_yellow_color_button.setChecked(False)
+            self.wf_green_color_button.setChecked(False)
+            self.wf_none_color_button.setChecked(True)
+
     def db_get_color(self) -> Color:
         if self.db_red_color_button.isChecked():
             return Color.RED
@@ -280,11 +327,22 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         elif self.db_none_color_button.isChecked():
             return Color.NONE
 
+    def wf_get_color(self) -> Color:
+        if self.wf_red_color_button.isChecked():
+            return Color.RED
+        elif self.wf_blue_color_button.isChecked():
+            return Color.BLUE
+        elif self.wf_green_color_button.isChecked():
+            return Color.GREEN
+        elif self.wf_yellow_color_button.isChecked():
+            return Color.YELLOW
+        elif self.wf_none_color_button.isChecked():
+            return Color.NONE
+
     def db_select_tables(self) -> None:
         table_name: str = self.db_table_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
         try:
             table: Table = self.store.get_tables(table_name)[0]
-            self.store.populate_table_data(table)
             self.current_table = table
             self.fill_db_fields()
         except IndexError:
@@ -294,16 +352,29 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.unplugged = v
         self.db_filter_tables()
 
-    def toggle_color_filter(self, color: Color):
+    def db_toggle_color_filter(self, color: Color):
         def func(value):
             if value:
-                self.color_filter.append(color)
+                self.db_color_filter.append(color)
             else:
                 try:
-                    self.color_filter.remove(color)
+                    self.db_color_filter.remove(color)
                 except ValueError:
                     pass
             self.db_filter_tables()
+
+        return func
+
+    def wf_toggle_color_filter(self, color: Color):
+        def func(value):
+            if value:
+                self.wf_color_filter.append(color)
+            else:
+                try:
+                    self.wf_color_filter.remove(color)
+                except ValueError:
+                    pass
+            self.wf_filter_workflows()
 
         return func
 
@@ -331,13 +402,15 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.store: Store = Store('db.sqlite3')
         self.directory_path: str = None
         self.current_table: Table = None
+        self.current_workflow: Workflow = None
         self.unplugged: bool = False
-        self.color_filter: List[Color] = []
+        self.db_color_filter: List[Color] = []
+        self.wf_color_filter: List[Color] = []
         self.setupUi(self)
         self.set_menu_state()
         self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
         self.wf_workflow_list.setModel(self.wf_workflow_list_model)
-        self.wf_workflow_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.wf_save_button.clicked.connect(self.save_wf_fields)
         self.wf_source_list_model = QStandardItemModel(self.wf_source_list)
         self.wf_source_list.setModel(self.wf_source_list_model)
         self.wf_effected_list_model = QStandardItemModel(self.wf_effected_list)
@@ -353,6 +426,11 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.action_clear_database.triggered.connect(self.clear_database)
         self.wf_workflow_search.textChanged.connect(self.wf_filter_workflows)
         self.wf_workflow_list.selectionModel().selectionChanged.connect(self.wf_select_workflows)
+        self.wf_blue_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.BLUE))
+        self.wf_green_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.GREEN))
+        self.wf_red_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.RED))
+        self.wf_yellow_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.YELLOW))
+        self.wf_none_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.NONE))
         self.wf_filter_workflows()
 
         self.db_table_list_model = QStandardItemModel(self.db_table_list)
@@ -374,11 +452,11 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_table_list.selectionModel().selectionChanged.connect(self.db_select_tables)
         self.db_save_button.clicked.connect(self.save_db_fields)
         self.db_show_only_unplugged.stateChanged.connect(self.db_change_tables_filter)
-        self.db_blue_color_filter.stateChanged.connect(self.toggle_color_filter(Color.BLUE))
-        self.db_green_color_filter.stateChanged.connect(self.toggle_color_filter(Color.GREEN))
-        self.db_red_color_filter.stateChanged.connect(self.toggle_color_filter(Color.RED))
-        self.db_yellow_color_filter.stateChanged.connect(self.toggle_color_filter(Color.YELLOW))
-        self.db_none_color_filter.stateChanged.connect(self.toggle_color_filter(Color.NONE))
+        self.db_blue_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.BLUE))
+        self.db_green_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.GREEN))
+        self.db_red_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.RED))
+        self.db_yellow_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.YELLOW))
+        self.db_none_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.NONE))
         self.db_filter_tables()
 
 
