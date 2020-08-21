@@ -2,6 +2,7 @@ import json
 import os
 import re
 import glob
+from operator import itemgetter
 from time import time
 import sqlparse
 from typing import List, Dict, Generator, Any, Set, Union, Tuple
@@ -110,26 +111,40 @@ def extract_tables(statement: str, table_names: Set[str]) -> List[str]:
     :param table_names: set of known table names
     :return: set of used table names
     """
-    used_table_names: List[str] = []
+    used_table_names: List[Tuple[str, int]] = []
     hql_script: str = statement.lower().replace('\n', ' ').strip()
-    for word in hql_script.split(' '):
-        if word == '':
+    # for word in hql_script.split(' '):
+    #     if word == '':
+    #         continue
+    #     name = sqlparse.parse(word)[0].token_first()
+    #     if not name:
+    #         continue
+    #     if not isinstance(name, sqlparse.sql.Identifier) and name.ttype != sqlparse.tokens.Name:
+    #         continue
+    #     for table_name in table_names:
+    #         valid_name = re.match(r'^\S+\.\S+$', table_name)
+    #         if not valid_name:
+    #             continue
+    #         only_name: str = table_name.split('.')[1].lower()
+    #         if word == table_name or word == only_name:
+    #             used_table_names.append(table_name)
+    #             break
+    for table_name in table_names:
+        valid_name = re.match(r'^\S+\.\S+$', table_name)
+        if not valid_name:
             continue
-        name = sqlparse.parse(word)[0].token_first()
-        if not name:
+        try:
+            table_name_index: int = hql_script.index(f' {table_name} ')
+            used_table_names.append((table_name, table_name_index))
             continue
-        if not isinstance(name, sqlparse.sql.Identifier) and name.ttype != sqlparse.tokens.Name:
-            continue
-        for table_name in table_names:
-            valid_name = re.match(r'^\S+\.\S+$', table_name)
-            if not valid_name:
+        except ValueError:
+            try:
+                only_name: str = table_name.split('.')[1].lower()
+                only_name_index: int = hql_script.index(f' {only_name} ')
+                used_table_names.append((table_name, only_name_index))
+            except ValueError:
                 continue
-            only_name: str = table_name.split('.')[1].lower()
-            if table_name == 'aa.rd_optimizely_x_ga_filtered_collisions':
-                b = 1
-            if word == table_name or word == only_name:
-                used_table_names.append(table_name)
-                break
+    used_table_names: List[str] = [t[0] for t in sorted(used_table_names, key=lambda x: -x[1])]
     return used_table_names
 
 
@@ -169,7 +184,7 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
             continue
         if command.normalized == 'CREATE':
             partitions: Set[str] = extract_partitions(statement)
-            table_names: List[str] = list(reversed(extract_tables(statement.normalized, all_table_names)))
+            table_names: List[str] = extract_tables(statement.normalized, all_table_names)
             if len(table_names) == 0:
                 continue
             created_table_id = tables_name_id_dict[table_names.pop()]
@@ -179,7 +194,7 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
             table_partitions.update(((created_table_id, p_n) for p_n in partitions))
             table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
         elif command.normalized == 'INSERT':
-            table_names: List[str] = list(reversed(extract_tables(statement.normalized, all_table_names)))
+            table_names: List[str] = extract_tables(statement.normalized, all_table_names)
             if len(table_names) == 0:
                 continue
             inserted_table_id = tables_name_id_dict[table_names.pop()]
@@ -189,7 +204,7 @@ def parse_hql(script_text: str, workflow_id: int, tables_name_id_dict: Dict[str,
             table_used_in.update(((b_t_i, workflow_id) for b_t_i in base_tables_ids))
         elif command.normalized == 'WITH':
             sub_statements: List[str] = lower_statement.split('insert')
-            table_names: List[str] = list(reversed(extract_tables(sub_statements[1], all_table_names)))
+            table_names: List[str] = extract_tables(sub_statements[1], all_table_names)
             if len(table_names) == 0:
                 continue
             inserted_table_name = table_names.pop()
