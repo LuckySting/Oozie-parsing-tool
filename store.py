@@ -171,7 +171,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS TABLE_COLUMNS
             (
                 TABLE_ID REFERENCES TABLES,
-                COLUMN_NAME TEXT NOT NULL UNIQUE,
+                COLUMN_NAME TEXT NOT NULL,
                 COLUMN_TYPE TEXT NOT NULL,
                 CONSTRAINT TC_PK PRIMARY KEY(TABLE_ID, COLUMN_NAME)
             );
