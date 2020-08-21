@@ -191,14 +191,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def db_filter_tables(self) -> None:
         search_text: str = self.db_table_search.text()
         self.db_table_list_model.clear()
-        for table in self.store.get_tables(search_text=search_text, color_filter=self.db_color_filter):
+        for table in self.store.get_tables(search_text=search_text, color_filter=self.db_color_filter,
+                                           only_unplugged=self.unplugged):
             color: QColor = QColor(Color.to_q_color(table.color))
             brush: QBrush = QBrush(color)
             item = QStandardItem(table.name)
             item.setEditable(False)
             item.setForeground(brush)
             self.db_table_list_model.appendRow(item)
-
 
     def fill_db_fields(self) -> None:
         if self.current_table:
@@ -399,7 +399,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             QApplication.clipboard().setText(db_list)
         elif tab_id == 1:
             wf_list: str = '\n'.join(
-                [self.wf_workflow_list_model.item(r_i, 0).text() for r_i in range(self.wf_workflow_list_model.rowCount())])
+                [self.wf_workflow_list_model.item(r_i, 0).text() for r_i in
+                 range(self.wf_workflow_list_model.rowCount())])
             QApplication.clipboard().setText(wf_list)
 
     def __init__(self):

@@ -23,6 +23,7 @@ class Color(Enum):
 class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
                  color: Union[Color, str] = Color.NONE,
+                 unplugged=None,
                  columns=None,
                  created_in_workflows=None,
                  used_in_workflows=None,
@@ -51,6 +52,7 @@ class Table:
         self.used_in_workflows: List[str] = used_in_workflows
         self.based_on_tables: List[str] = based_on_tables
         self.partitions: List[str] = partitions
+        self.unplugged: bool = unplugged
 
     @staticmethod
     def from_dict(data: Dict[str, any]):
@@ -193,10 +195,40 @@ class Store:
         cursor.close()
 
     def get_tables(self, search_text: str = '', color_filter=None, only_names: bool = False,
-                   id_name_pairs: bool = False) -> List[Union[str, Table, Tuple[int, str]]]:
+                   id_name_pairs: bool = False, only_unplugged=False) -> List[Union[str, Table, Tuple[int, str]]]:
         if color_filter is None:
             color_filter = []
-        sql: str = 'SELECT ID, NAME, MEANING, AUTHORS, SQOOPED, COLOR FROM TABLES WHERE instr(NAME, ?) > 0'
+        sql: str = """
+        SELECT 
+            ID,
+            NAME,
+            MEANING,
+            AUTHORS,
+            SQOOPED,
+            COLOR,
+            (
+               SELECT COUNT(*)
+               FROM (
+                    SELECT TARGET_TABLE AS COLS
+                    FROM TABLE_BASED_ON
+                    WHERE TARGET_TABLE = TABLES.ID
+                    UNION
+                    SELECT CREATED_TABLE
+                    FROM TABLE_CREATED_IN
+                    WHERE CREATED_TABLE = TABLES.ID
+                    UNION
+                    SELECT UPDATED_TABLE
+                    FROM TABLE_UPDATED_IN
+                    WHERE UPDATED_TABLE = TABLES.ID
+                    UNION
+                    SELECT USED_TABLE
+                    FROM TABLE_USED_IN
+                    WHERE USED_TABLE = TABLES.ID
+                )
+            ) AS UNPLUGGED
+        FROM TABLES 
+        WHERE instr(NAME, ?) > 0
+        """
         if len(color_filter) > 0:
             if Color.NONE not in color_filter:
                 where_color: str = ' AND COLOR IN (' + ', '.join([f'\'{c.value}\'' for c in color_filter]) + ')'
@@ -204,6 +236,8 @@ class Store:
                 where_color: str = ' AND (COLOR IN (' + ', '.join(
                     [f'\'{c.value}\'' for c in color_filter]) + ') OR COLOR IS NULL)'
             sql += where_color
+        if only_unplugged:
+            sql += 'AND UNPLUGGED = 0'
         cursor: sqlite3.Cursor = self.connection.cursor()
         tables: List[Tuple] = cursor.execute(sql, (search_text,)).fetchall()
         cursor.close()
