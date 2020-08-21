@@ -311,6 +311,4 @@ def parse_workflows_coroutine(working_dir: str, table_id_name_pairs: List[Tuple[
 
 
 if __name__ == '__main__':
-    store = Store('db.sqlite3')
-    for a in parse_workflows_coroutine('./workflow', store.get_tables(id_name_pairs=True)):
-        print(a)
+    print('Default script does not defined')

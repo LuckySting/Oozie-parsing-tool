@@ -507,7 +507,6 @@ class Store:
         if sql[-1] == ',':
             sql = sql[:-1]
         sql += """)"""
-        print(sql)
         cursor.execute(sql)
         self.connection.commit()
         cursor.close()
