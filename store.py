@@ -26,6 +26,15 @@ class Color(Enum):
                 return c
         return cls.NONE
 
+    def __lt__(self, other: 'Color'):
+        if other is None:
+            other: Color = Color.NONE
+        colors: List[Color] = [Color.YELLOW, Color.BLUE, Color.GREEN, Color.RED, Color.NONE]
+        return colors.index(self) < colors.index(other)
+
+    def __gt__(self, other: 'Color'):
+        return not self < other
+
 
 class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],
@@ -70,6 +79,15 @@ class Table:
 
     def __repr__(self):
         return f'Table({str(self)})'
+
+    def __lt__(self, other):
+        if self.color != other.color:
+            return self.color < other.color
+        else:
+            return self.name < other.name
+
+    def __gt__(self, other):
+        return not self < other
 
 
 class Workflow:

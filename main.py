@@ -29,13 +29,29 @@ def change_item_color(model: QStandardItemModel, item_text: str, color: Color):
 
 
 def sort_by_text_and_color(search_box: QLineEdit, color_filter: List[Color], proxy_model: QSortFilterProxyModel):
-    def func(row: int, _):
+    def func(row: int, _) -> bool:
         model: QStandardItemModel = proxy_model.sourceModel()
         search_text: str = search_box.text()
         item: QStandardItem = model.item(row)
         text: str = item.text()
         color = Color.from_q_color(item.foreground().color())
         return search_text in text and (not len(color_filter) or color in color_filter)
+
+    return func
+
+
+def less_than_name_color(proxy_model: QSortFilterProxyModel):
+    def func(left: QModelIndex, right: QModelIndex) -> bool:
+        model: QStandardItemModel = proxy_model.sourceModel()
+        left_item: QStandardItem = model.item(left.row())
+        right_item: QStandardItem = model.item(right.row())
+        left_text: str = left_item.text()
+        right_text: str = right_item.text()
+        left_color: Color = Color.from_q_color(left_item.foreground().color())
+        right_color: Color = Color.from_q_color(right_item.foreground().color())
+        if left_color != right_color:
+            return left_color < right_color
+        return left_text < right_text
 
     return func
 
@@ -194,6 +210,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def wf_filter_workflows(self) -> None:
         self.wf_workflow_proxy_model.invalidateFilter()
+        self.wf_workflow_proxy_model.sort(0)
 
     def wf_select_workflows(self) -> None:
         try:
@@ -247,6 +264,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def db_filter_tables(self) -> None:
         self.db_table_proxy_model.invalidateFilter()
+        self.db_table_proxy_model.sort(0)
 
     def fill_db_fields(self) -> None:
         if self.current_table:
@@ -458,14 +476,16 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.setupUi(self)
         self.set_menu_state()
 
-
         self.wf_workflow_list_model = QStandardItemModel(self)
         self.wf_workflow_proxy_model = QSortFilterProxyModel(self)
         self.wf_workflow_proxy_model.setSourceModel(self.wf_workflow_list_model)
         self.wf_workflow_list.setModel(self.wf_workflow_proxy_model)
-        self.wf_workflow_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.wf_workflow_search, self.wf_color_filter,
-                                                                            self.wf_workflow_proxy_model)
+        self.wf_workflow_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.wf_workflow_search,
+                                                                               self.wf_color_filter,
+                                                                               self.wf_workflow_proxy_model)
+        self.wf_workflow_proxy_model.lessThan = less_than_name_color(self.wf_workflow_proxy_model)
         self.wf_fill_workflows()
+        self.wf_workflow_proxy_model.sort(0)
 
         self.wf_save_button.clicked.connect(self.save_wf_fields)
         self.wf_source_list_model = QStandardItemModel(self.wf_source_list)
@@ -491,14 +511,15 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_yellow_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.YELLOW))
         self.wf_none_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.NONE))
 
-
         self.db_table_list_model = QStandardItemModel(self)
         self.db_table_proxy_model = QSortFilterProxyModel(self)
         self.db_table_proxy_model.setSourceModel(self.db_table_list_model)
         self.db_table_list.setModel(self.db_table_proxy_model)
         self.db_table_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.db_table_search, self.db_color_filter,
                                                                             self.db_table_proxy_model)
+        self.db_table_proxy_model.lessThan = less_than_name_color(self.db_table_proxy_model)
         self.db_fill_tables()
+        self.db_table_proxy_model.sort(0)
 
         self.db_created_at_list_model = QStandardItemModel(self.db_created_at_list)
         self.db_created_at_list.setModel(self.db_created_at_list_model)
