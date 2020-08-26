@@ -19,6 +19,13 @@ class Color(Enum):
         else:
             return QColor(color.value)
 
+    @classmethod
+    def from_q_color(cls, color: QColor) -> 'Color':
+        for c in cls:
+            if Color.to_q_color(c) == color:
+                return c
+        return cls.NONE
+
 
 class Table:
     def __init__(self, index: int, name: str, meaning: str, authors: str, sqooped: Union[bool, int],

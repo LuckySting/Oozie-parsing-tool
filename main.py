@@ -3,9 +3,10 @@ import sys
 from typing import List, Tuple, Dict
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QModelIndex
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
-from PyQt5.QtWidgets import QFileDialog, QAbstractItemView, QApplication
+from PyQt5.QtCore import QSortFilterProxyModel
+from PyQt5.QtWidgets import QFileDialog, QApplication, QLineEdit
 
 import design
 from store import Store, Table, Workflow, Color
@@ -16,6 +17,27 @@ def copy_model_to_clipboard(model: QStandardItemModel):
     db_list: str = '\n'.join(
         [model.item(r_i, 0).text() for r_i in range(model.rowCount())])
     QApplication.clipboard().setText(db_list)
+
+
+def change_item_color(model: QStandardItemModel, item_text: str, color: Color):
+    for i in range(model.rowCount()):
+        item: QStandardItem = model.item(i, 0)
+        if item_text == item.text():
+            color: QColor = QColor(Color.to_q_color(color))
+            brush: QBrush = QBrush(color)
+            item.setForeground(brush)
+
+
+def sort_by_text_and_color(search_box: QLineEdit, color_filter: List[Color], proxy_model: QSortFilterProxyModel):
+    def func(row: int, _):
+        model: QStandardItemModel = proxy_model.sourceModel()
+        search_text: str = search_box.text()
+        item: QStandardItem = model.item(row)
+        text: str = item.text()
+        color = Color.from_q_color(item.foreground().color())
+        return search_text in text and (not len(color_filter) or color in color_filter)
+
+    return func
 
 
 class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
@@ -161,10 +183,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_filter_tables()
         self.wf_filter_workflows()
 
-    def wf_filter_workflows(self) -> None:
-        search_text: str = self.wf_workflow_search.text()
-        self.wf_workflow_list_model.clear()
-        for workflow in self.store.get_workflows(search_text, color_filter=self.wf_color_filter):
+    def wf_fill_workflows(self) -> None:
+        for workflow in self.store.get_workflows():
             color: QColor = QColor(Color.to_q_color(workflow.color))
             brush: QBrush = QBrush(color)
             item = QStandardItem(workflow.name)
@@ -172,9 +192,12 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             item.setEditable(False)
             self.wf_workflow_list_model.appendRow(item)
 
+    def wf_filter_workflows(self) -> None:
+        self.wf_workflow_proxy_model.invalidateFilter()
+
     def wf_select_workflows(self) -> None:
-        workflow_name: str = self.wf_workflow_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
         try:
+            workflow_name: str = self.wf_workflow_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
             workflow: Workflow = self.store.get_workflows(workflow_name)[0]
             self.store.populate_workflow_data(workflow)
             self.current_workflow = workflow
@@ -210,19 +233,20 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if self.current_workflow:
             self.current_workflow.color = self.wf_get_color()
             self.store.update_workflow(self.current_workflow)
-            self.wf_filter_workflows()
+            change_item_color(self.wf_workflow_list_model, self.current_workflow.name, self.current_workflow.color)
 
-    def db_filter_tables(self) -> None:
-        search_text: str = self.db_table_search.text()
+    def db_fill_tables(self) -> None:
         self.db_table_list_model.clear()
-        for table in self.store.get_tables(search_text=search_text, color_filter=self.db_color_filter,
-                                           only_unplugged=self.unplugged):
+        for table in self.store.get_tables():
             color: QColor = QColor(Color.to_q_color(table.color))
             brush: QBrush = QBrush(color)
             item = QStandardItem(table.name)
             item.setEditable(False)
             item.setForeground(brush)
             self.db_table_list_model.appendRow(item)
+
+    def db_filter_tables(self) -> None:
+        self.db_table_proxy_model.invalidateFilter()
 
     def fill_db_fields(self) -> None:
         if self.current_table:
@@ -267,7 +291,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.current_table.authors = self.db_authors_input.toPlainText()
             self.current_table.color = self.db_get_color()
             self.store.update_table(self.current_table)
-            self.db_filter_tables()
+            change_item_color(self.db_table_list_model, self.current_table.name, self.current_table.color)
 
     def db_set_color(self, color: Color):
         if color is Color.RED:
@@ -358,8 +382,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             return Color.NONE
 
     def db_select_tables(self) -> None:
-        table_name: str = self.db_table_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
         try:
+            table_name: str = self.db_table_list.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
             table: Table = self.store.get_tables(table_name)[0]
             self.current_table = table
             self.fill_db_fields()
@@ -433,8 +457,16 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_color_filter: List[Color] = []
         self.setupUi(self)
         self.set_menu_state()
-        self.wf_workflow_list_model = QStandardItemModel(self.wf_workflow_list)
-        self.wf_workflow_list.setModel(self.wf_workflow_list_model)
+
+
+        self.wf_workflow_list_model = QStandardItemModel(self)
+        self.wf_workflow_proxy_model = QSortFilterProxyModel(self)
+        self.wf_workflow_proxy_model.setSourceModel(self.wf_workflow_list_model)
+        self.wf_workflow_list.setModel(self.wf_workflow_proxy_model)
+        self.wf_workflow_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.wf_workflow_search, self.wf_color_filter,
+                                                                            self.wf_workflow_proxy_model)
+        self.wf_fill_workflows()
+
         self.wf_save_button.clicked.connect(self.save_wf_fields)
         self.wf_source_list_model = QStandardItemModel(self.wf_source_list)
         self.wf_source_list.setModel(self.wf_source_list_model)
@@ -458,10 +490,16 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_red_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.RED))
         self.wf_yellow_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.YELLOW))
         self.wf_none_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.NONE))
-        self.wf_filter_workflows()
 
-        self.db_table_list_model = QStandardItemModel(self.db_table_list)
-        self.db_table_list.setModel(self.db_table_list_model)
+
+        self.db_table_list_model = QStandardItemModel(self)
+        self.db_table_proxy_model = QSortFilterProxyModel(self)
+        self.db_table_proxy_model.setSourceModel(self.db_table_list_model)
+        self.db_table_list.setModel(self.db_table_proxy_model)
+        self.db_table_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.db_table_search, self.db_color_filter,
+                                                                            self.db_table_proxy_model)
+        self.db_fill_tables()
+
         self.db_created_at_list_model = QStandardItemModel(self.db_created_at_list)
         self.db_created_at_list.setModel(self.db_created_at_list_model)
         self.db_updated_at_list_model = QStandardItemModel(self.db_updated_at_list)
@@ -486,8 +524,6 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_none_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.NONE))
 
         self.bind_copy_actions()
-
-        self.db_filter_tables()
 
 
 def main():
