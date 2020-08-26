@@ -89,14 +89,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         for table in tables:
             if table.name in tables_dict:
                 self.store.insert_table_columns([(table.index, t[0], t[1]) for t in tables_dict[table.name]])
-                del tables_dict[table.name]
+                # del tables_dict[table.name]
                 progress += 1
                 yield int((progress / length * 100) + 1)
-        for table_name in tables_dict:
-            table: Table = self.store.insert_new_table(table_name)
-            self.store.insert_table_columns([(table.index, t[0], t[1]) for t in tables_dict[table.name]])
-            progress += 1
-            yield int((progress / length * 100) + 1)
+        # for table_name in tables_dict:
+        #     table: Table = self.store.insert_new_table(table_name)
+        #     self.store.insert_table_columns([(table.index, t[0], t[1]) for t in tables_dict[table.name]])
+        #     progress += 1
+        #     yield int((progress / length * 100) + 1)
         return True
 
     def extract_hive_schema(self) -> None:
