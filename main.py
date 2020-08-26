@@ -28,18 +28,6 @@ def change_item_color(model: QStandardItemModel, item_text: str, color: Color):
             item.setForeground(brush)
 
 
-def sort_by_text_and_color(search_box: QLineEdit, color_filter: List[Color], proxy_model: QSortFilterProxyModel):
-    def func(row: int, _) -> bool:
-        model: QStandardItemModel = proxy_model.sourceModel()
-        search_text: str = search_box.text()
-        item: QStandardItem = model.item(row)
-        text: str = item.text()
-        color = Color.from_q_color(item.foreground().color())
-        return search_text in text and (not len(color_filter) or color in color_filter)
-
-    return func
-
-
 def less_than_name_color(proxy_model: QSortFilterProxyModel):
     def func(left: QModelIndex, right: QModelIndex) -> bool:
         model: QStandardItemModel = proxy_model.sourceModel()
@@ -74,6 +62,25 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_descendants_label.mousePressEvent = copy_list(self.wf_predecessors_list_model)
         self.wf_source_label.mousePressEvent = copy_list(self.wf_source_list_model)
         self.wf_effected_label.mousePressEvent = copy_list(self.wf_effected_list_model)
+
+    def sort_by_text_and_color(self, search_box: QLineEdit, color_filter: List[Color],
+                               proxy_model: QSortFilterProxyModel, watch_unplugged: bool = False):
+        unplugged_tables: List[str] = []
+        if watch_unplugged:
+            unplugged_tables: List[str] = self.store.get_tables('', only_unplugged=True, only_names=True)
+
+        def func(row: int, _) -> bool:
+            model: QStandardItemModel = proxy_model.sourceModel()
+            search_text: str = search_box.text()
+            item: QStandardItem = model.item(row)
+            text: str = item.text()
+            if watch_unplugged and self.only_unplugged['value']:
+                if text not in unplugged_tables:
+                    return False
+            color = Color.from_q_color(item.foreground().color())
+            return search_text in text and (not len(color_filter) or color in color_filter)
+
+        return func
 
     def select_workflows_directory(self) -> None:
         dialog: QFileDialog = QFileDialog(self, caption='Select workflows directory')
@@ -229,19 +236,19 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.wf_source_list_model.clear()
             self.wf_predecessors_list_model.clear()
             self.wf_descendants_list_model.clear()
-            for ef_t in self.current_workflow.effected_tables:
+            for ef_t in sorted(self.current_workflow.effected_tables):
                 item = QStandardItem(ef_t)
                 item.setEditable(False)
                 self.wf_effected_list_model.appendRow(item)
-            for src_t in self.current_workflow.source_tables:
+            for src_t in sorted(self.current_workflow.source_tables):
                 item = QStandardItem(src_t)
                 item.setEditable(False)
                 self.wf_source_list_model.appendRow(item)
-            for p_w in self.current_workflow.predecessors:
+            for p_w in sorted(self.current_workflow.predecessors):
                 item = QStandardItem(p_w)
                 item.setEditable(False)
                 self.wf_predecessors_list_model.appendRow(item)
-            for d_w in self.current_workflow.descendants:
+            for d_w in sorted(self.current_workflow.descendants):
                 item = QStandardItem(d_w)
                 item.setEditable(False)
                 self.wf_descendants_list_model.appendRow(item)
@@ -278,23 +285,23 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_used_in_list_model.clear()
             self.db_partitions_list_model.clear()
             self.db_columns_list_model.clear()
-            for s in self.current_table.based_on_tables:
+            for s in sorted(self.current_table.based_on_tables):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_based_on_list_model.appendRow(item)
-            for s in self.current_table.created_in_workflows:
+            for s in sorted(self.current_table.created_in_workflows):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_created_at_list_model.appendRow(item)
-            for s in self.current_table.updated_in_workflows:
+            for s in sorted(self.current_table.updated_in_workflows):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_updated_at_list_model.appendRow(item)
-            for s in self.current_table.used_in_workflows:
+            for s in sorted(self.current_table.used_in_workflows):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_used_in_list_model.appendRow(item)
-            for s in self.current_table.partitions:
+            for s in sorted(self.current_table.partitions):
                 item = QStandardItem(s)
                 item.setEditable(False)
                 self.db_partitions_list_model.appendRow(item)
@@ -409,7 +416,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             pass
 
     def db_change_tables_filter(self, v: bool):
-        self.unplugged = v
+        self.only_unplugged['value'] = v
         self.db_filter_tables()
 
     def db_toggle_color_filter(self, color: Color):
@@ -470,7 +477,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.directory_path: str = None
         self.current_table: Table = None
         self.current_workflow: Workflow = None
-        self.unplugged: bool = False
+        self.only_unplugged: Dict[str, bool] = {'value': False}
         self.db_color_filter: List[Color] = []
         self.wf_color_filter: List[Color] = []
         self.setupUi(self)
@@ -480,9 +487,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_workflow_proxy_model = QSortFilterProxyModel(self)
         self.wf_workflow_proxy_model.setSourceModel(self.wf_workflow_list_model)
         self.wf_workflow_list.setModel(self.wf_workflow_proxy_model)
-        self.wf_workflow_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.wf_workflow_search,
-                                                                               self.wf_color_filter,
-                                                                               self.wf_workflow_proxy_model)
+        self.wf_workflow_proxy_model.filterAcceptsRow = self.sort_by_text_and_color(self.wf_workflow_search,
+                                                                                    self.wf_color_filter,
+                                                                                    self.wf_workflow_proxy_model
+                                                                                    )
         self.wf_workflow_proxy_model.lessThan = less_than_name_color(self.wf_workflow_proxy_model)
         self.wf_fill_workflows()
         self.wf_workflow_proxy_model.sort(0)
@@ -515,8 +523,10 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_table_proxy_model = QSortFilterProxyModel(self)
         self.db_table_proxy_model.setSourceModel(self.db_table_list_model)
         self.db_table_list.setModel(self.db_table_proxy_model)
-        self.db_table_proxy_model.filterAcceptsRow = sort_by_text_and_color(self.db_table_search, self.db_color_filter,
-                                                                            self.db_table_proxy_model)
+        self.db_table_proxy_model.filterAcceptsRow = self.sort_by_text_and_color(self.db_table_search,
+                                                                                 self.db_color_filter,
+                                                                                 self.db_table_proxy_model,
+                                                                                 watch_unplugged=True)
         self.db_table_proxy_model.lessThan = less_than_name_color(self.db_table_proxy_model)
         self.db_fill_tables()
         self.db_table_proxy_model.sort(0)
