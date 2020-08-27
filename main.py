@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt, QModelIndex
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QFont
 from PyQt5.QtCore import QSortFilterProxyModel
 from PyQt5.QtWidgets import QFileDialog, QApplication, QLineEdit
 
@@ -285,6 +285,13 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             self.db_used_in_list_model.clear()
             self.db_partitions_list_model.clear()
             self.db_columns_list_model.clear()
+            for s in sorted(self.current_table.first_based_on_tables):
+                item = QStandardItem(s)
+                font: QFont = item.font()
+                font.setBold(True)
+                item.setFont(font)
+                item.setEditable(False)
+                self.db_based_on_list_model.appendRow(item)
             for s in sorted(self.current_table.based_on_tables):
                 item = QStandardItem(s)
                 item.setEditable(False)

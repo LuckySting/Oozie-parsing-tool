@@ -43,7 +43,7 @@ class Table:
                  columns=None,
                  created_in_workflows=None,
                  used_in_workflows=None,
-                 updated_in_workflows=None, based_on_tables=None, partitions=None):
+                 updated_in_workflows=None, based_on_tables=None, first_based_on_tables=None, partitions=None):
         if columns is None:
             columns = list()
         if partitions is None:
@@ -56,6 +56,8 @@ class Table:
             created_in_workflows = list()
         if used_in_workflows is None:
             used_in_workflows = list()
+        if first_based_on_tables is None:
+            first_based_on_tables = list()
         self.index: int = index
         self.name: str = name
         self.meaning: str = meaning
@@ -67,6 +69,7 @@ class Table:
         self.updated_in_workflows: List[str] = updated_in_workflows
         self.used_in_workflows: List[str] = used_in_workflows
         self.based_on_tables: List[str] = based_on_tables
+        self.first_based_on_tables: List[str] = first_based_on_tables
         self.partitions: List[str] = partitions
         self.unplugged: bool = unplugged
 
@@ -411,13 +414,14 @@ class Store:
                                     SELECT DISTINCT BASE_TABLE FROM TABLE_BASED_ON WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
         based_on_tables: Set[int] = {t[0] for t in based_on}
+        table.first_based_on_tables = list({table_id_name_dict[t[0]] for t in based_on})
         base_tables: Set[int] = set()
         while len(based_on_tables):
             table_id: int = based_on_tables.pop()
             base_tables.add(table_id)
             if table_id in relations_dict:
                 based_on_tables.update(relations_dict[table_id].difference(base_tables))
-        based_on = [table_id_name_dict[i] for i in base_tables]
+        based_on = [table_id_name_dict[i] for i in base_tables if i not in based_on_tables]
         partitions = cursor.execute("""
                                     SELECT DISTINCT PARTITION_NAME FROM TABLE_PARTITIONS WHERE TARGET_TABLE = ?
                                 """, (table.index,)).fetchall()
