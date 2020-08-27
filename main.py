@@ -329,31 +329,31 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if color is Color.RED:
             self.db_red_color_button.setChecked(True)
             self.db_blue_color_button.setChecked(False)
-            self.db_yellow_color_button.setChecked(False)
+            self.db_magenta_color_button.setChecked(False)
             self.db_green_color_button.setChecked(False)
             self.db_none_color_button.setChecked(False)
         elif color is Color.BLUE:
             self.db_red_color_button.setChecked(False)
             self.db_blue_color_button.setChecked(True)
-            self.db_yellow_color_button.setChecked(False)
+            self.db_magenta_color_button.setChecked(False)
             self.db_green_color_button.setChecked(False)
             self.db_none_color_button.setChecked(False)
-        elif color is Color.YELLOW:
+        elif color is Color.MAGENTA:
             self.db_red_color_button.setChecked(False)
             self.db_blue_color_button.setChecked(False)
-            self.db_yellow_color_button.setChecked(True)
+            self.db_magenta_color_button.setChecked(True)
             self.db_green_color_button.setChecked(False)
             self.db_none_color_button.setChecked(False)
         elif color is Color.GREEN:
             self.db_red_color_button.setChecked(False)
             self.db_blue_color_button.setChecked(False)
-            self.db_yellow_color_button.setChecked(False)
+            self.db_magenta_color_button.setChecked(False)
             self.db_green_color_button.setChecked(True)
             self.db_none_color_button.setChecked(False)
         else:
             self.db_red_color_button.setChecked(False)
             self.db_blue_color_button.setChecked(False)
-            self.db_yellow_color_button.setChecked(False)
+            self.db_magenta_color_button.setChecked(False)
             self.db_green_color_button.setChecked(False)
             self.db_none_color_button.setChecked(True)
 
@@ -361,31 +361,31 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         if color is Color.RED:
             self.wf_red_color_button.setChecked(True)
             self.wf_blue_color_button.setChecked(False)
-            self.wf_yellow_color_button.setChecked(False)
+            self.wf_magenta_color_button.setChecked(False)
             self.wf_green_color_button.setChecked(False)
             self.wf_none_color_button.setChecked(False)
         elif color is Color.BLUE:
             self.wf_red_color_button.setChecked(False)
             self.wf_blue_color_button.setChecked(True)
-            self.wf_yellow_color_button.setChecked(False)
+            self.wf_magenta_color_button.setChecked(False)
             self.wf_green_color_button.setChecked(False)
             self.wf_none_color_button.setChecked(False)
-        elif color is Color.YELLOW:
+        elif color is Color.MAGENTA:
             self.wf_red_color_button.setChecked(False)
             self.wf_blue_color_button.setChecked(False)
-            self.wf_yellow_color_button.setChecked(True)
+            self.wf_magenta_color_button.setChecked(True)
             self.wf_green_color_button.setChecked(False)
             self.wf_none_color_button.setChecked(False)
         elif color is Color.GREEN:
             self.wf_red_color_button.setChecked(False)
             self.wf_blue_color_button.setChecked(False)
-            self.wf_yellow_color_button.setChecked(False)
+            self.wf_magenta_color_button.setChecked(False)
             self.wf_green_color_button.setChecked(True)
             self.wf_none_color_button.setChecked(False)
         else:
             self.wf_red_color_button.setChecked(False)
             self.wf_blue_color_button.setChecked(False)
-            self.wf_yellow_color_button.setChecked(False)
+            self.wf_magenta_color_button.setChecked(False)
             self.wf_green_color_button.setChecked(False)
             self.wf_none_color_button.setChecked(True)
 
@@ -396,8 +396,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             return Color.BLUE
         elif self.db_green_color_button.isChecked():
             return Color.GREEN
-        elif self.db_yellow_color_button.isChecked():
-            return Color.YELLOW
+        elif self.db_magenta_color_button.isChecked():
+            return Color.MAGENTA
         elif self.db_none_color_button.isChecked():
             return Color.NONE
 
@@ -408,8 +408,8 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             return Color.BLUE
         elif self.wf_green_color_button.isChecked():
             return Color.GREEN
-        elif self.wf_yellow_color_button.isChecked():
-            return Color.YELLOW
+        elif self.wf_magenta_color_button.isChecked():
+            return Color.MAGENTA
         elif self.wf_none_color_button.isChecked():
             return Color.NONE
 
@@ -523,7 +523,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_blue_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.BLUE))
         self.wf_green_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.GREEN))
         self.wf_red_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.RED))
-        self.wf_yellow_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.YELLOW))
+        self.wf_magenta_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.MAGENTA))
         self.wf_none_color_filter.stateChanged.connect(self.wf_toggle_color_filter(Color.NONE))
 
         self.db_table_list_model = QStandardItemModel(self)
@@ -558,7 +558,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.db_blue_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.BLUE))
         self.db_green_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.GREEN))
         self.db_red_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.RED))
-        self.db_yellow_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.YELLOW))
+        self.db_magenta_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.MAGENTA))
         self.db_none_color_filter.stateChanged.connect(self.db_toggle_color_filter(Color.NONE))
 
         self.bind_copy_actions()

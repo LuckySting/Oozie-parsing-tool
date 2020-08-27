@@ -108,23 +108,23 @@ class Ui_MainWindow(object):
         self.horizontalLayout_4.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout_4.setSpacing(10)
         self.horizontalLayout_4.setObjectName("horizontalLayout_4")
-        self.db_yellow_color_filter = QtWidgets.QCheckBox(self.db_color_filters)
+        self.db_magenta_color_filter = QtWidgets.QCheckBox(self.db_color_filters)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.db_yellow_color_filter.sizePolicy().hasHeightForWidth())
-        self.db_yellow_color_filter.setSizePolicy(sizePolicy)
-        self.db_yellow_color_filter.setStyleSheet("QCheckBox {\n"
-"background-color: yellow; \n"
+        sizePolicy.setHeightForWidth(self.db_magenta_color_filter.sizePolicy().hasHeightForWidth())
+        self.db_magenta_color_filter.setSizePolicy(sizePolicy)
+        self.db_magenta_color_filter.setStyleSheet("QCheckBox {\n"
+"background-color: magenta; \n"
 "spacing: 0;\n"
 "}\n"
 "QCheckBox::indicator {\n"
 "    subcontrol-position: center center;\n"
 "}")
-        self.db_yellow_color_filter.setText("")
-        self.db_yellow_color_filter.setChecked(False)
-        self.db_yellow_color_filter.setObjectName("db_yellow_color_filter")
-        self.horizontalLayout_4.addWidget(self.db_yellow_color_filter)
+        self.db_magenta_color_filter.setText("")
+        self.db_magenta_color_filter.setChecked(False)
+        self.db_magenta_color_filter.setObjectName("db_magenta_color_filter")
+        self.horizontalLayout_4.addWidget(self.db_magenta_color_filter)
         self.db_blue_color_filter = QtWidgets.QCheckBox(self.db_color_filters)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
@@ -296,26 +296,26 @@ class Ui_MainWindow(object):
         self.horizontalLayout_3.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout_3.setSpacing(20)
         self.horizontalLayout_3.setObjectName("horizontalLayout_3")
-        self.db_yellow_color_button = QtWidgets.QRadioButton(self.db_color_buttons)
+        self.db_magenta_color_button = QtWidgets.QRadioButton(self.db_color_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.db_yellow_color_button.sizePolicy().hasHeightForWidth())
-        self.db_yellow_color_button.setSizePolicy(sizePolicy)
-        self.db_yellow_color_button.setMinimumSize(QtCore.QSize(0, 0))
-        self.db_yellow_color_button.setMaximumSize(QtCore.QSize(16777215, 16777215))
-        self.db_yellow_color_button.setLayoutDirection(QtCore.Qt.LeftToRight)
-        self.db_yellow_color_button.setStyleSheet("QRadioButton {\n"
-"background-color: yellow; \n"
+        sizePolicy.setHeightForWidth(self.db_magenta_color_button.sizePolicy().hasHeightForWidth())
+        self.db_magenta_color_button.setSizePolicy(sizePolicy)
+        self.db_magenta_color_button.setMinimumSize(QtCore.QSize(0, 0))
+        self.db_magenta_color_button.setMaximumSize(QtCore.QSize(16777215, 16777215))
+        self.db_magenta_color_button.setLayoutDirection(QtCore.Qt.LeftToRight)
+        self.db_magenta_color_button.setStyleSheet("QRadioButton {\n"
+"background-color: magenta; \n"
 "spacing: 0;\n"
 "}\n"
 "QRadioButton::indicator {\n"
 "    subcontrol-position: center center;\n"
 "}")
-        self.db_yellow_color_button.setText("")
-        self.db_yellow_color_button.setIconSize(QtCore.QSize(16, 16))
-        self.db_yellow_color_button.setObjectName("db_yellow_color_button")
-        self.horizontalLayout_3.addWidget(self.db_yellow_color_button)
+        self.db_magenta_color_button.setText("")
+        self.db_magenta_color_button.setIconSize(QtCore.QSize(16, 16))
+        self.db_magenta_color_button.setObjectName("db_magenta_color_button")
+        self.horizontalLayout_3.addWidget(self.db_magenta_color_button)
         self.db_blue_color_button = QtWidgets.QRadioButton(self.db_color_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
@@ -419,14 +419,14 @@ class Ui_MainWindow(object):
         self.db_used_in_list = QtWidgets.QListView(self.db_frame)
         self.db_used_in_list.setObjectName("db_used_in_list")
         self.db_vertical_layout_3.addWidget(self.db_used_in_list)
-        self.db_tableau_label = QtWidgets.QLabel(self.db_frame)
-        self.db_tableau_label.setEnabled(False)
-        self.db_tableau_label.setAutoFillBackground(False)
-        self.db_tableau_label.setStyleSheet("background-color: white;")
-        self.db_tableau_label.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.db_tableau_label.setIndent(5)
-        self.db_tableau_label.setObjectName("db_tableau_label")
-        self.db_vertical_layout_3.addWidget(self.db_tableau_label)
+        self.db_source_label_3 = QtWidgets.QLabel(self.db_frame)
+        self.db_source_label_3.setEnabled(False)
+        self.db_source_label_3.setAutoFillBackground(False)
+        self.db_source_label_3.setStyleSheet("background-color: white;")
+        self.db_source_label_3.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.db_source_label_3.setIndent(5)
+        self.db_source_label_3.setObjectName("db_source_label_3")
+        self.db_vertical_layout_3.addWidget(self.db_source_label_3)
         self.db_tableau_list = QtWidgets.QListView(self.db_frame)
         self.db_tableau_list.setEnabled(False)
         self.db_tableau_list.setObjectName("db_tableau_list")
@@ -473,23 +473,23 @@ class Ui_MainWindow(object):
         self.horizontalLayout_9.setContentsMargins(5, 5, 5, 5)
         self.horizontalLayout_9.setSpacing(20)
         self.horizontalLayout_9.setObjectName("horizontalLayout_9")
-        self.wf_yellow_color_filter = QtWidgets.QCheckBox(self.wf_color_filter_buttons)
+        self.wf_magenta_color_filter = QtWidgets.QCheckBox(self.wf_color_filter_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.wf_yellow_color_filter.sizePolicy().hasHeightForWidth())
-        self.wf_yellow_color_filter.setSizePolicy(sizePolicy)
-        self.wf_yellow_color_filter.setStyleSheet("QCheckBox {\n"
-"background-color: yellow; \n"
+        sizePolicy.setHeightForWidth(self.wf_magenta_color_filter.sizePolicy().hasHeightForWidth())
+        self.wf_magenta_color_filter.setSizePolicy(sizePolicy)
+        self.wf_magenta_color_filter.setStyleSheet("QCheckBox {\n"
+"background-color: magenta; \n"
 "spacing: 0;\n"
 "}\n"
 "QCheckBox::indicator {\n"
 "    subcontrol-position: center center;\n"
 "}")
-        self.wf_yellow_color_filter.setText("")
-        self.wf_yellow_color_filter.setChecked(False)
-        self.wf_yellow_color_filter.setObjectName("wf_yellow_color_filter")
-        self.horizontalLayout_9.addWidget(self.wf_yellow_color_filter)
+        self.wf_magenta_color_filter.setText("")
+        self.wf_magenta_color_filter.setChecked(False)
+        self.wf_magenta_color_filter.setObjectName("wf_magenta_color_filter")
+        self.horizontalLayout_9.addWidget(self.wf_magenta_color_filter)
         self.wf_blue_color_filter = QtWidgets.QCheckBox(self.wf_color_filter_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
@@ -586,22 +586,22 @@ class Ui_MainWindow(object):
         self.horizontalLayout_7.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout_7.setSpacing(20)
         self.horizontalLayout_7.setObjectName("horizontalLayout_7")
-        self.wf_yellow_color_button = QtWidgets.QRadioButton(self.wf_color_buttons)
+        self.wf_magenta_color_button = QtWidgets.QRadioButton(self.wf_color_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.wf_yellow_color_button.sizePolicy().hasHeightForWidth())
-        self.wf_yellow_color_button.setSizePolicy(sizePolicy)
-        self.wf_yellow_color_button.setStyleSheet("QRadioButton {\n"
-"background-color: yellow; \n"
+        sizePolicy.setHeightForWidth(self.wf_magenta_color_button.sizePolicy().hasHeightForWidth())
+        self.wf_magenta_color_button.setSizePolicy(sizePolicy)
+        self.wf_magenta_color_button.setStyleSheet("QRadioButton {\n"
+"background-color: magenta; \n"
 "spacing: 0;\n"
 "}\n"
 "QRadioButton::indicator {\n"
 "    subcontrol-position: center center;\n"
 "}")
-        self.wf_yellow_color_button.setText("")
-        self.wf_yellow_color_button.setObjectName("wf_yellow_color_button")
-        self.horizontalLayout_7.addWidget(self.wf_yellow_color_button)
+        self.wf_magenta_color_button.setText("")
+        self.wf_magenta_color_button.setObjectName("wf_magenta_color_button")
+        self.horizontalLayout_7.addWidget(self.wf_magenta_color_button)
         self.wf_blue_color_button = QtWidgets.QRadioButton(self.wf_color_buttons)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
         sizePolicy.setHorizontalStretch(0)
@@ -865,7 +865,7 @@ class Ui_MainWindow(object):
         self.db_columns_label.setText(_translate("MainWindow", "Columns"))
         self.db_based_on_label.setText(_translate("MainWindow", "Based on tables"))
         self.db_used_in_label.setText(_translate("MainWindow", "Used in workflows"))
-        self.db_tableau_label.setText(_translate("MainWindow", "Used in Tableau workbooks"))
+        self.db_source_label_3.setText(_translate("MainWindow", "Used in Tableau workbooks"))
         self.db_save_button.setText(_translate("MainWindow", "Save"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.db_tab), _translate("MainWindow", "Databases"))
         self.wf_workflow_search.setPlaceholderText(_translate("MainWindow", "Search workflow... "))

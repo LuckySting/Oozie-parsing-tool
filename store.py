@@ -8,7 +8,7 @@ from PyQt5.QtGui import QColor
 class Color(Enum):
     RED: str = 'red'
     BLUE: str = 'blue'
-    YELLOW: str = 'yellow'
+    MAGENTA: str = 'magenta'
     GREEN: str = 'green'
     NONE: str = None
 
@@ -29,7 +29,7 @@ class Color(Enum):
     def __lt__(self, other: 'Color'):
         if other is None:
             other: Color = Color.NONE
-        colors: List[Color] = [Color.YELLOW, Color.BLUE, Color.GREEN, Color.RED, Color.NONE]
+        colors: List[Color] = [Color.MAGENTA, Color.BLUE, Color.GREEN, Color.RED, Color.NONE]
         return colors.index(self) < colors.index(other)
 
     def __gt__(self, other: 'Color'):
