@@ -326,8 +326,21 @@ class Store:
         else:
             return 'db_empty'
 
-    def get_related_tables(self, first_wf_name: str, second_wf_name: str) -> List[str]:
-        return ['test', 'test1', 'test2']
+    def get_related_tables(self, target_wf_name: str, base_wf_name: str) -> List[str]:
+        cursor: sqlite3.Cursor = self.connection.cursor()
+        sql: str = """
+            SELECT DISTINCT
+                (SELECT NAME FROM TABLES WHERE ID = E.EFFECTED_TABLE) AS RELATED_TABLE
+            FROM
+            (
+                SELECT CREATED_TABLE AS EFFECTED_TABLE, WORKFLOW AS WORKFLOW_ID, W2.NAME AS WORKFLOW_NAME FROM TABLE_CREATED_IN JOIN WORKFLOWS W2 on TABLE_CREATED_IN.WORKFLOW = W2.ID
+                UNION
+                SELECT UPDATED_TABLE, WORKFLOW, W3.NAME FROM TABLE_UPDATED_IN JOIN WORKFLOWS W3 on TABLE_UPDATED_IN.WORKFLOW = W3.ID
+            ) AS E JOIN TABLE_USED_IN TUI ON E.EFFECTED_TABLE = TUI.USED_TABLE JOIN WORKFLOWS W on TUI.WORKFLOW = W.ID
+            WHERE E.WORKFLOW_NAME = ? AND W.NAME = ?;
+        """
+        related_tables: List[str] = [t[0] for t in cursor.execute(sql, (base_wf_name, target_wf_name))]
+        return related_tables
 
     def populate_workflow_data(self, workflow: Workflow):
         cursor: sqlite3.Cursor = self.connection.cursor()

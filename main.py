@@ -64,11 +64,11 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_source_label.mousePressEvent = copy_list(self.wf_source_list_model)
         self.wf_effected_label.mousePressEvent = copy_list(self.wf_effected_list_model)
 
-    def context_menu_requested(self, view: QListView):
+    def context_menu_requested(self, view: QListView, reverse_target: bool = False):
         def func(position):
             menu: QMenu = QMenu(self)
             related_tables_action: QAction = menu.addAction('Show related tables')
-            related_tables_action.triggered.connect(self.show_related_tables(view))
+            related_tables_action.triggered.connect(self.show_related_tables(view, reverse_target))
             menu.exec_(view.viewport().mapToGlobal(position))
 
         return func
@@ -92,11 +92,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         dialog.setLayout(layout)
         return dialog, list_view_model
 
-    def show_related_tables(self, view: QListView):
+    def show_related_tables(self, view: QListView, reverse_target: bool):
         def func():
-            first_wf: str = view.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
-            second_wf: str = self.current_workflow.name
-            related_tables: List[str] = self.store.get_related_tables(first_wf, second_wf)
+            base_wf: str = view.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
+            target_wf: str = self.current_workflow.name
+            if reverse_target:
+                target_wf = base_wf
+                base_wf = self.current_workflow.name
+            related_tables: List[str] = self.store.get_related_tables(target_wf, base_wf)
             dialog, list_view_model = self.create_list_view_dialog()
             for s in related_tables:
                 item: QStandardItem = QStandardItem(s)
@@ -559,7 +562,7 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_descendants_list.setModel(self.wf_descendants_list_model)
         self.wf_descendants_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.wf_descendants_list.customContextMenuRequested.connect(
-            self.context_menu_requested(self.wf_descendants_list))
+            self.context_menu_requested(self.wf_descendants_list, reverse_target=True))
 
         self.action_open_workflows.triggered.connect(self.select_workflows_directory)
         self.action_extract_hive.triggered.connect(self.extract_hive_schema)
