@@ -6,7 +6,8 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt, QModelIndex
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QBrush, QColor, QFont
 from PyQt5.QtCore import QSortFilterProxyModel
-from PyQt5.QtWidgets import QFileDialog, QApplication, QLineEdit
+from PyQt5.QtWidgets import QFileDialog, QApplication, QLineEdit, QMenu, QAction, QListView, QDialog, QAbstractItemView, \
+    QHBoxLayout, QVBoxLayout, QPushButton
 
 import design
 from store import Store, Table, Workflow, Color
@@ -62,6 +63,48 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_descendants_label.mousePressEvent = copy_list(self.wf_predecessors_list_model)
         self.wf_source_label.mousePressEvent = copy_list(self.wf_source_list_model)
         self.wf_effected_label.mousePressEvent = copy_list(self.wf_effected_list_model)
+
+    def context_menu_requested(self, view: QListView):
+        def func(position):
+            menu: QMenu = QMenu(self)
+            related_tables_action: QAction = menu.addAction('Show related tables')
+            related_tables_action.triggered.connect(self.show_related_tables(view))
+            menu.exec_(view.viewport().mapToGlobal(position))
+
+        return func
+
+    def create_list_view_dialog(self) -> (QDialog, QStandardItemModel):
+        dialog: QDialog = QDialog(self)
+        dialog.setWindowTitle('Related tables')
+        dialog.resize(800, 600)
+        dialog.setMinimumSize(600, 400)
+        layout: QVBoxLayout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        list_view: QListView = QListView()
+        list_view.resize(400, 400)
+        list_view_model: QStandardItemModel = QStandardItemModel(list_view)
+        list_view.setModel(list_view_model)
+        save_button: QPushButton = QPushButton('Copy to clipboard')
+        save_button.clicked.connect(lambda _: copy_model_to_clipboard(list_view_model))
+        layout.addWidget(list_view)
+        layout.addWidget(save_button)
+        dialog.setLayout(layout)
+        return dialog, list_view_model
+
+    def show_related_tables(self, view: QListView):
+        def func():
+            first_wf: str = view.selectionModel().selectedIndexes()[0].data(Qt.DisplayRole)
+            second_wf: str = self.current_workflow.name
+            related_tables: List[str] = self.store.get_related_tables(first_wf, second_wf)
+            dialog, list_view_model = self.create_list_view_dialog()
+            for s in related_tables:
+                item: QStandardItem = QStandardItem(s)
+                item.setEditable(False)
+                list_view_model.appendRow(item)
+            dialog.exec_()
+
+        return func
 
     def sort_by_text_and_color(self, search_box: QLineEdit, color_filter: List[Color],
                                proxy_model: QSortFilterProxyModel, watch_unplugged: bool = False):
@@ -509,8 +552,14 @@ class MainApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.wf_effected_list.setModel(self.wf_effected_list_model)
         self.wf_predecessors_list_model = QStandardItemModel(self.wf_predecessors_list)
         self.wf_predecessors_list.setModel(self.wf_predecessors_list_model)
+        self.wf_predecessors_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.wf_predecessors_list.customContextMenuRequested.connect(
+            self.context_menu_requested(self.wf_predecessors_list))
         self.wf_descendants_list_model = QStandardItemModel(self.wf_descendants_list)
         self.wf_descendants_list.setModel(self.wf_descendants_list_model)
+        self.wf_descendants_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.wf_descendants_list.customContextMenuRequested.connect(
+            self.context_menu_requested(self.wf_descendants_list))
 
         self.action_open_workflows.triggered.connect(self.select_workflows_directory)
         self.action_extract_hive.triggered.connect(self.extract_hive_schema)

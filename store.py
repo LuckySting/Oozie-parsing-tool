@@ -326,6 +326,9 @@ class Store:
         else:
             return 'db_empty'
 
+    def get_related_tables(self, first_wf_name: str, second_wf_name: str) -> List[str]:
+        return ['test', 'test1', 'test2']
+
     def populate_workflow_data(self, workflow: Workflow):
         cursor: sqlite3.Cursor = self.connection.cursor()
         relations: List[Tuple] = cursor.execute(
