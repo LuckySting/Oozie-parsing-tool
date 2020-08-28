@@ -1,6 +1,8 @@
 venv
+wenv
 dist
 build
+__pycache__
 workflow
 workflow_small
 .idea
